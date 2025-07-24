@@ -17,7 +17,6 @@ The value of this header MUST be a JSON object with the following structure:
   "policy": {
     // See "Sigsum Policy Format"
   },
-  "max_age": <integer>
 }
 ```
 
@@ -31,9 +30,6 @@ The value of this header MUST be a JSON object with the following structure:
 
 - `policy`:  
   A JSON object specifying the transparency log configuration and the associated witness policy required to validate signed checkpoints. This includes the list of witnesses, group definitions, and quorum requirements. See [Sigsum Policy Format](#sigsum-policy-format) for details.
-
-- `max_age`:  
-  An integer representing the maximum number of seconds a manifest may remain valid after its associated Sigsum checkpoint timestamp. Since different signatures might have different inclusion times, `max_age` is always counted from the oldest one.
 
 ### 2. Policy Transition Mechanism
 
