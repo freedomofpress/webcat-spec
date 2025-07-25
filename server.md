@@ -60,6 +60,8 @@ To prevent enrollment failure:
 - The contents of `x-webcat` MUST remain unchanged throughout this period.
 - Any modification to `x-webcat` before the transition completes will invalidate the attempt.
 
+_TODO: since anybody can submit a request for enrollment or de-enrollment, so can do the infra chain itself. This allows for periodic list clenaups not to clog browsers, to remove expired or abandone domains. It can also backfire in some ways though. We should probably always send an alert to the whois email when a change is initiated.
+
 #### 2.3 Post-Transition Compatibility
 
 After the transition is accepted:
