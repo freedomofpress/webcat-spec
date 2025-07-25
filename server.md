@@ -20,6 +20,8 @@ The value of this header MUST be a JSON object with the following structure:
 }
 ```
 
+_TODO_: Clients check this upon first visit, and then cache the policy. Serving it in all HTTP requests adds significant overhead, and is likely avoidable. We should have a speciifc validation path for enrollment, and then possibly attach this metadata to manifest files, which have to be fetched anyway.
+
 #### 1.1 Field Definitions
 
 - `signers`:  
@@ -32,7 +34,7 @@ The value of this header MUST be a JSON object with the following structure:
   A JSON object specifying the transparency log configuration and the associated witness policy required to validate signed checkpoints. This includes the list of witnesses, group definitions, and quorum requirements. See [Sigsum Policy Format](#sigsum-policy-format) for details.
 
 - `max_age`:  
-  An integer representing the maximum number of seconds a manifest may remain valid after its signing timestamp. Since different signatures might have different inclusion times, `max_age` is always counted from the oldest one. _TODO: what do we check this against? We could use the infra chain as a distributed timestamping authority, and requiring the inclusion of a timestamped consensus as proof of time. As we'd have a librery to verify consensus anyways for the preload list updates, it should be easy to implement._
+  An integer representing the maximum number of seconds a manifest may remain valid after its signing timestamp. Since different signatures might have different inclusion times, `max_age` is always counted from the oldest one. _TODO: what do we check this against? We could use the infra chain as a distributed timestamping authority, and requiring the inclusion of a timestamped consensus as proof of time. As we'd have a library to verify consensus anyways for the preload list updates, it should be easy to implement._
 
 
 
@@ -145,6 +147,8 @@ A valid `policy` object MUST include the following top-level keys:
   "quorum": "Trusted-Bloc"
 }
 ```
+
+_TODO: JSON isn't great for this, given that in the original format was designed to be ordered and parsed line by line, to resolve groups and witnesses dependencies._
 
 #### 4.2 `witnesses`
 This field MUST be a dictionary mapping witness identifiers (strings) to base64-encoded Ed25519 public keys.
