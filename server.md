@@ -60,7 +60,7 @@ To prevent enrollment failure:
 - The contents of `x-webcat` MUST remain unchanged throughout this period.
 - Any modification to `x-webcat` before the transition completes will invalidate the attempt.
 
-_TODO: since anybody can submit a request for enrollment or de-enrollment, so can do the infra chain itself. This allows for periodic list clenaups not to clog browsers, to remove expired or abandone domains. It can also backfire in some ways though. We should probably always send an alert to the whois email when a change is initiated.
+_TODO: since anybody can submit a request for enrollment or de-enrollment, so can do the infra chain itself. This allows for periodic list clenaups not to clog browsers, to remove expired or abandone domains. It can also backfire in some ways though. We should probably always send an alert to the whois email when a change is initiated._
 
 #### 2.3 Post-Transition Compatibility
 
@@ -89,6 +89,8 @@ Websites MAY include an additional header to aid user understanding by referenci
 ```
 x-webcat-delegation: <delegated-fqdn>
 ```
+
+This header is not security critical, and thus its integrity does not need guarantees. This header signals to the browsers that the policy of this websites should match the policy of another domain. A practical example could be: cryptpad.org developes and host a flasgship instance of CryptPad. As the CryptPad developers are expected to define the policy for their product and sign accordingly to it, websites who do not fork and change the would want to enforce the same policy. Thus, the policy of cryptpad.collective.it could be the same of cryptpad.org. the `w-webcat-delegation` header provides this information to the browser, and confirm it by performing a local lookup in the preload list. If the header matches, the browser SHOULD expose this information to the end user in a format TBD based on UX considerations. A basic example could be "Verified by cryptpad.org").
 
 ### 4. Sigsum Policy Format
 
