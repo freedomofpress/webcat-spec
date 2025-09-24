@@ -6,7 +6,7 @@ The enrollment data are processed and stored in a permissioned CometBFT chain, w
 
 # Background
 
-CometBFT is a Byzantine Fault Tolerant (BFT) consensus algorithm derived from [Tendermint](https://arxiv.org/abs/1807.04938). It provides a round-based protocol that will reach consensus as long as at least $\gt 2/3$ of the validator voting power is online and honest. The benefit of using CometBFT is that consensus and the networking parts of the chain are handled by an external dependency.
+[CometBFT](https://docs.cometbft.com/v1.0/) is a Byzantine Fault Tolerant (BFT) consensus algorithm derived from [Tendermint](https://arxiv.org/abs/1807.04938). It provides a round-based protocol that will reach consensus as long as at least $\gt 2/3$ of the validator voting power is online and honest. The benefit of using CometBFT is that consensus and the networking parts of the chain are handled by an external dependency.
 
 The blockchain state machine runs as an ABCI application. The consensus algorithm orders transactions into blocks, and the ABCI application executes them into the application state.
 
