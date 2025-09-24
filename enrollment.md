@@ -55,7 +55,7 @@ Invariants:
 - Non-concurrent: There cannot be multiple enrollment requests for a domain.
 
 The enrollment process involves:
-1. User places `enrollment.json` at:
+1. User publishes the domain's enrollment policy (see `server.md`) at:
 
 ```
 https://<domain>/.well-known/webcat/enrollment.json
