@@ -44,7 +44,7 @@ This allows clients to verify the `AppHash` against the chain and check manifest
 ## Enrollment
 
 Chain parameters:
-- `MAX_NUMBER_SUBDOMAINS`: the maximum number of subdomains per domain to rate limit abuse.
+- `MAX_NUMBER_SUBDOMAINS`: the maximum number of subdomains per domain to rate-limit abuse.
 - `NUM_REQUIRED_ORACLES`: the number of oracle observations that must post a response to the chain
 - `COOLDOWN_BLOCKS`: the number of blocks that must elapse before the domain is allowed to move from the pending set to the active set.
 - `TIMEOUT_BLOCKS`: if insufficient oracle observations arrive within this number of blocks, the enrollment request expires.
