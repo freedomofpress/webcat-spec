@@ -26,7 +26,7 @@ Each block produced by the enrollment network has a block height (a monatonic co
 
 Previous proofs (older AppHash values) can be reused in manifests, allowing for backdating. This is acceptable because the security goal is to prevent future-dating, wherein a manifest would be valid longer than it should be.
 
-The chain itself does not enforce expiry, clients check the expiry using the consensus timestamp.
+The chain itself does not enforce expiry; clients check the expiry using the consensus timestamp.
 
 The consensus data will be published to a CDN with the following structure:
 
