@@ -4,6 +4,8 @@ This document explains how domains enroll into WEBCAT and how validators and ora
 
 The enrollment data are processed and stored in a permissioned CometBFT chain, where the voting network consists of trusted partner orgs (other nonprofits, Tor relay associations, browsers) acting as validators in the CometBFT consensus. Any third party can operate an observer node that allows them to check consistency, behavior, or monitor entries and updates.
 
+TODO: Add description of onion service enrollment, which must be done privately.
+
 # Background
 
 [CometBFT](https://docs.cometbft.com/v1.0/) is a Byzantine Fault Tolerant (BFT) consensus algorithm derived from [Tendermint](https://arxiv.org/abs/1807.04938). It provides a round-based protocol that will reach consensus as long as at least $\gt 2/3$ of the validator voting power is online and honest. The benefit of using CometBFT is that consensus and the networking parts of the chain are handled by an external dependency.
@@ -41,6 +43,8 @@ The consensus data will be published to a CDN with the following structure:
 
 This allows clients to verify the `AppHash` against the chain and check manifest expiry using the consensus timestamp.
 
+TODO: Clients don't want to have to get the `AppHash`, and the CDN can publish whatever it wants if we don't check the `AppHash` to timestamp correspondence using consensus data (same problem with the snapshot)
+
 ## Enrollment
 
 Chain parameters:
@@ -69,14 +73,16 @@ To unenroll, clients must remove the enrollment JSON and oracles verify that pat
 #### Structure
 
 An `EnrollmentRequest` contains (TODO):
-- domain:
-- subdomains:
+- domain
 - `signers`: a list of Ed25519 public keys
 
 #### `CheckTx`/`DeliverTx`
 
 We validate:
-- The maximum number of subdomains per domain has not been reached.
+- `MAX_NUMBER_SUBDOMAINS` per domain has not been reached. This is done
+by checking against other domains in the active set.
+
+TODO: Move this validation of subdomains into the oracles
 
 The pending set tracks domains awaiting oracle observations. Each entry contains:
 
@@ -87,7 +93,7 @@ The pending set tracks domains awaiting oracle observations. Each entry contains
 
 Upon a new validated enrollment request:
 - If no pending request exists for the domain, we add it to the pending set.
-- If a pending request already exists for that domain, we remove the existing pending entry, add a new entry with the current block height as `request_height` with `oracle_observations` set to empty.
+- If a pending request already exists for that domain, we drop it.
 
 Note that a domain can be in the active set and there can be an update in the pending set.
 
