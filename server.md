@@ -1,14 +1,15 @@
 ## Server configuration
-To participate in the WEBCAT integrity verification system, a website MUST advertise a cryptographic enrollment policy via a custom HTTP response header. This policy defines the set of trusted signers, the signature threshold, and the Sigsum-based policy used to validate the transparency logging signed manifest updates.
+To participate in the WEBCAT integrity verification system, a website MUST advertise a cryptographic enrollment policy via a well-known path. This policy defines the set of trusted signers, the signature threshold, and the Sigsum-based policy used to validate the transparency logging signed manifest updates.
 
-### 1. `x-webcat` Header
+### 1. Well-Known Enrollment Path
 
-Websites MUST include the `x-webcat` header in all HTTP responses, including:
+Websites MUST serve their enrollment policy at:
 
-- `/index.html` or `/` (used for enrollment discovery)
-- All subresources (scripts, workers, etc.)
+```
+https://<domain>/.well-known/webcat/enrollment.json
+```
 
-The value of this header MUST be a JSON object with the following structure:
+This endpoint MUST return a JSON object with the following structure:
 
 ```json
 {
@@ -17,26 +18,25 @@ The value of this header MUST be a JSON object with the following structure:
   "policy": {
     // See "Sigsum Policy Format"
   },
+  "max_age": <integer>
 }
 ```
 
-_TODO_: Clients check this upon first visit, and then cache the policy. Serving it in all HTTP requests adds significant overhead, and is likely avoidable. We should have a speciifc validation path for enrollment, and then possibly attach this metadata to manifest files, which have to be fetched anyway.
+The enrollment policy is discovered by clients during the enrollment process and cached for the duration of the domain's enrollment. This approach eliminates the overhead of including policy data in every HTTP response.
 
 #### 1.1 Field Definitions
 
-- `signers`:  
+- `signers`:
   An array of Ed25519 public keys, base64-encoded. These keys are authorized to sign WebCAT manifest files for the domain.
 
-- `threshold`:  
+- `threshold`:
   An integer ≥ 1 indicating the minimum number of distinct valid signatures required to accept a manifest as valid. The value of `threshold` MUST be less than or equal to the number of entries in `signers`.
 
-- `policy`:  
+- `policy`:
   A JSON object specifying the transparency log configuration and the associated witness policy required to validate signed checkpoints. This includes the list of witnesses, group definitions, and quorum requirements. See [Sigsum Policy Format](#sigsum-policy-format) for details.
 
-- `max_age`:  
-  An integer representing the maximum number of seconds a manifest may remain valid after its signing timestamp. Since different signatures might have different inclusion times, `max_age` is always counted from the oldest one. _TODO: what do we check this against? We could use the infra chain as a distributed timestamping authority, and requiring the inclusion of a timestamped consensus as proof of time. As we'd have a library to verify consensus anyways for the preload list updates, it should be easy to implement._
-
-
+- `max_age`:
+  An integer representing the maximum number of seconds a manifest may remain valid after its signing timestamp. Since different signatures might have different inclusion times, `max_age` is always counted from the oldest one. The timestamp is verified against the CometBFT chain's AppHash as described in the enrollment specification.
 
 ### 2. Policy Transition Mechanism
 
@@ -46,19 +46,19 @@ To transition from one enrollment policy to another, servers MUST follow a stric
 
 When initiating a policy change:
 
-- The new policy MUST be served persistently in the `x-webcat` header.
-- The previous policy SHOULD be served in the `x-webcat-prev` header.
-- The values of `x-webcat` and `x-webcat-prev` MUST differ.
+- The new policy MUST be served persistently at `/.well-known/webcat/enrollment.json`.
+- The previous policy SHOULD be served at `/.well-known/webcat/enrollment-prev.json`.
+- The values of the two files MUST differ.
 
 #### 2.2 Enrollment Observation Period
 
-Once the new policy is published, it enters a transition period during which enrollment systems monitor the header for consistency and stability.
+Once the new policy is published, it enters a transition period during which enrollment systems monitor the well-known path for consistency and stability.
 
 > ⚠️ **During this period, no clients have switched to the new policy yet.**
 
 To prevent enrollment failure:
-- The contents of `x-webcat` MUST remain unchanged throughout this period.
-- Any modification to `x-webcat` before the transition completes will invalidate the attempt.
+- The contents of `/.well-known/webcat/enrollment.json` MUST remain unchanged throughout this period.
+- Any modification to the enrollment file before the transition completes will invalidate the attempt.
 
 _TODO: since anybody can submit a request for enrollment or de-enrollment, so can do the infra chain itself. This allows for periodic list clenaups not to clog browsers, to remove expired or abandone domains. It can also backfire in some ways though. We should probably always send an alert to the whois email when a change is initiated._
 
@@ -70,14 +70,17 @@ After the transition is accepted:
 - Eventually, all clients will converge on the new state.
 
 To ensure full compatibility throughout this staggered rollout:
-- The server SHOULD continue serving `x-webcat-prev` until all clients are expected to have adopted the new policy.
-- Once adoption is widespread, `x-webcat-prev` SHOULD be removed.
+- The server SHOULD continue serving `/.well-known/webcat/enrollment-prev.json` until all clients are expected to have adopted the new policy.
+- Once adoption is widespread, `/.well-known/webcat/enrollment-prev.json` SHOULD be removed.
 
 #### 2.4 Example
 
-```http
-x-webcat: { "signers": [...], "threshold": 2, ... }
-x-webcat-prev: { "signers": [...], "threshold": 3, ... }
+```json
+// /.well-known/webcat/enrollment.json
+{ "signers": [...], "threshold": 2, ... }
+
+// /.well-known/webcat/enrollment-prev.json
+{ "signers": [...], "threshold": 3, ... }
 ```
 
 In this example, the server is advertising a new policy requiring 2 signers, while still supporting the older 3-signer policy during the transition window.
