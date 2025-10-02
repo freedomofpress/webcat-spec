@@ -87,19 +87,13 @@ In this example, the server is advertising a new policy requiring 2 signers, whi
 
 ### 3. Policy Delegation (Optional)
 
-Websites MAY include a delegation field in their enrollment.json to aid user understanding by referencing another domain's policy:
+Websites MAY include an additional header to aid user understanding by referencing another domain’s policy:
 
-```json
-{
-  "signers": [...],
-  "threshold": 2,
-  "policy": {...},
-  "max_age": 86400,
-  "delegation": "cryptpad.org"
-}
+```
+x-webcat-delegation: <delegated-fqdn>
 ```
 
-This field is not security critical, and thus its integrity does not need guarantees. This field signals to browsers that the policy of this website should match the policy of another domain. A practical example could be: cryptpad.org develops and hosts a flagship instance of CryptPad. As the CryptPad developers are expected to define the policy for their product and sign accordingly to it, websites who do not fork and change the code would want to enforce the same policy. Thus, the policy of cryptpad.collective.it could be the same as cryptpad.org. The `delegation` field provides this information to the browser, and confirms it by performing a local lookup in the preload list. If the delegation matches, the browser SHOULD expose this information to the end user in a format TBD based on UX considerations. A basic example could be "Verified by cryptpad.org").
+This header is not security critical, and thus its integrity does not need guarantees. This header signals to the browsers that the policy of this websites should match the policy of another domain. A practical example could be: cryptpad.org developes and host a flasgship instance of CryptPad. As the CryptPad developers are expected to define the policy for their product and sign accordingly to it, websites who do not fork and change the would want to enforce the same policy. Thus, the policy of cryptpad.collective.it could be the same of cryptpad.org. the `w-webcat-delegation` header provides this information to the browser, and confirm it by performing a local lookup in the preload list. If the header matches, the browser SHOULD expose this information to the end user in a format TBD based on UX considerations. A basic example could be "Verified by cryptpad.org").
 
 ### 4. Sigsum Policy Format
 
