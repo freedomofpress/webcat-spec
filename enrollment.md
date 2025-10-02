@@ -22,28 +22,25 @@ After executing all transactions in a block, the Merkleized application state ro
 
 ## Timestamp
 
-The CometBFT AppHash is a timestamped commitment, so it can serve as the timestamp to ensure that manifests cannot be signed with future dates.
+The CometBFT `AppHash` is a timestamped commitment that serves as a verifiable timestamp to ensure that manifests cannot be signed with future dates.
 
-Each block produced by the enrollment network has a block height (a monatonic counter enforced by consensus), the corresponding AppHash, and a consensus timestamp. By signing a manifest that includes `(AppHash, height, timestamp)`, the manifest signer demonstrates that the manifest could not have existed before that block was finalized.
+Each block produced by the enrollment network has a block height (a monatonic counter enforced by consensus), the corresponding `AppHash`, and a consensus timestamp. This data
+is included in a verifiable form in the CometBFT [`LightBlock`](https://docs.cometbft.com/v0.34/spec/core/data_structures#lightblock) which contains a list of signatures from the validator set, and a header that contains the `AppHash` and the timestamp. By signing a manifest that includes the `LightBlock`, the manifest signer demonstrates that the manifest could not have existed before that block was finalized. Periodically a CDN will publish the latest `LightBlock`, and clients verify its validity using the signatures provided.
 
-Previous proofs (older AppHash values) can be reused in manifests, allowing for backdating. This is acceptable because the security goal is to prevent future-dating, wherein a manifest would be valid longer than it should be.
+Older `LightBlock` values can be reused in manifests, allowing for backdating. This is acceptable because the security goal is to prevent future-dating, wherein a manifest would be valid longer than it should be.
 
-The chain itself does not enforce expiry; clients check the expiry using the consensus timestamp.
+The chain itself does not enforce expiry; clients check the expiry using the consensus timestamp included in the manifest's `LightBlock`.
 
-The consensus data will be published to a CDN with the following structure:
+### CDN Publishing
 
-```json
-{
-  "height": 12345,
-  "app_hash": "abc123def456...",
-  "timestamp": 1640995200,
-  "block_time": "2025-05-01T00:00:00Z"
-}
-```
+The latest [`LightBlock`](https://docs.cometbft.com/v0.34/spec/core/data_structures#lightblock) consensus data will be published to a CDN daily.
 
-This allows clients to verify the `AppHash` against the chain and check manifest expiry using the consensus timestamp.
+Clients verify:
 
-TODO: Clients don't want to have to get the `AppHash`, and the CDN can publish whatever it wants if we don't check the `AppHash` to timestamp correspondence using consensus data (same problem with the snapshot)
+1. The `ValidatorSet` corresponds to the validator set shipped in their WEBCAT extension.
+2. The validator signatures in the commit are valid for the corresponding block.
+
+TODO: other stuff?
 
 ## Enrollment
 
@@ -152,7 +149,7 @@ TODO: Include back of the envelope numbers
 
 The snapshot is deterministic: by using the state at a particular block height, all full nodes will produce identical snapshots.
 
-The snapshot enables users to verify inclusion of a domain using only the snapshot and Merkle proof.
+The snapshot enables users to verify inclusion of a domain using the snapshot, Merkle proof, and latest `LightBlock`. The `LightBlock` contains validator signatures that cryptographically prove the `AppHash` was committed by the consensus network.
 
 Operationally, we'll scrape the state from a node and push it to a CDN. This can be done through a serverless cron job.
 
