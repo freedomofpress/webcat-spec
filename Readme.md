@@ -8,5 +8,5 @@ The spec is divided per-component:
 
 See also:
  - [WEBCAT repository](https://github.com/freedomofpress/webcat)
+ - [WEBCAT consensus-based enrollment system](https://github.com/freedomofpress/webcat-infra-chain)
  - [PoC for zero-knowledge enrollment of .onion domains](https://github.com/freedomofpress/webcat-zk-onion-enrollment)
- - [PoC for CometBFT-based enrollment infrastructure](https://github.com/freedomofpress/webcat-infra-chain)
