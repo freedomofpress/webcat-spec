@@ -15,9 +15,7 @@ This endpoint MUST return a JSON object with the following structure:
 {
   "signers": ["<base64-ed25519-public-key>", "..."],
   "threshold": <integer>,
-  "policy": {
-    // See "Sigsum Policy Format"
-  },
+  "policy": "<base64-sigsum-policy>",
   "max_age": <integer>
 }
 ```
@@ -33,7 +31,7 @@ The enrollment policy is discovered by clients during the enrollment process and
   An integer ≥ 1 indicating the minimum number of distinct valid signatures required to accept a manifest as valid. The value of `threshold` MUST be less than or equal to the number of entries in `signers`.
 
 - `policy`:
-  A JSON object specifying the transparency log configuration and the associated witness policy required to validate signed checkpoints. This includes the list of witnesses, group definitions, and quorum requirements. See [Sigsum Policy Format](#sigsum-policy-format) for details.
+  A base64-encoded string representing the compiled Sigsum policy. This includes the list of witnesses, group definitions, and quorum requirements. See [Sigsum Policy Format](#sigsum-policy-format) for details.
 
 - `max_age`:
   An integer representing the maximum number of seconds a manifest may remain valid after its signing timestamp. Since different signatures might have different inclusion times, `max_age` is always counted from the oldest one. The timestamp is verified against the CometBFT chain's AppHash as described in the enrollment specification.
@@ -95,6 +93,8 @@ x-webcat-delegation: <delegated-fqdn>
 
 This header is not security critical, and thus its integrity does not need guarantees. This header signals to the browsers that the policy of this websites should match the policy of another domain. A practical example could be: cryptpad.org developes and host a flasgship instance of CryptPad. As the CryptPad developers are expected to define the policy for their product and sign accordingly to it, websites who do not fork and change the would want to enforce the same policy. Thus, the policy of cryptpad.collective.it could be the same of cryptpad.org. the `w-webcat-delegation` header provides this information to the browser, and confirm it by performing a local lookup in the preload list. If the header matches, the browser SHOULD expose this information to the end user in a format TBD based on UX considerations. A basic example could be "Verified by cryptpad.org").
 
+TODO: See https://github.com/freedomofpress/webcat-spec/issues/6
+
 ### 4. Sigsum Policy Format
 
 The `policy` object defines how clients verify the authenticity of Sigsum checkpoints used in WEBCAT manifest validation. It specifies:
@@ -104,58 +104,9 @@ The `policy` object defines how clients verify the authenticity of Sigsum checkp
 - how those groups contribute to validation of individual logs, and
 - the overall quorum required for manifest acceptance.
 
-#### 4.1 Structure
+> ⚠️ Experimental
 
-A valid `policy` object MUST include the following top-level keys:
-
-- `witnesses`: mapping of witness IDs to Ed25519 public keys
-- `groups`: mapping of group names to quorum rules over witnesses or other groups
-- `logs`: a list of Sigsum logs
-- `quorum`: the final group that determines whether a signed checkpoint set is trusted
-
-```json
-{
-  "witnesses": {
-    "X1": "base64-key-X1",
-    "X2": "base64-key-X2",
-    "X3": "base64-key-X3",
-    "Y1": "base64-key-Y1",
-    "Y2": "base64-key-Y2",
-    "Y3": "base64-key-Y3",
-    "Z1": "base64-key-Z1"
-  },
-  "groups": {
-    "X-witnesses": {
-      "2": ["X1", "X2", "X3"]
-    },
-    "Y-witnesses": {
-      "1": ["Y1", "Y2", "Y3"]
-    },
-    "Z-witnesses": {
-      "1": ["Z1"]
-    },
-    "XY-majority": {
-      "2": ["X-witnesses", "Y-witnesses"]
-    },
-    "Trusted-Bloc": {
-      "1": ["XY-majority", "Z-witnesses"]
-    }
-  },
-  "logs": [
-    {
-      "base_url": "https://log-a.example.org",
-      "public_key": "base64-logkey-A",
-    },
-    {
-      "base_url": "https://log-b.example.org",
-      "public_key": "base64-logkey-B"
-    }
-  ],
-  "quorum": "Trusted-Bloc"
-}
-```
-
-_TODO: JSON isn't great for this, given that in the original format was designed to be ordered and parsed line by line, to resolve groups and witnesses dependencies._
+We are currently using the compiled Sigsum policy object as described [here](https://git.glasklar.is/sigsum/project/documentation/-/blob/main/archive/2025-09-12-sketch-compiled-policy.md), implemented originally [here](https://git.glasklar.is/nisse/sigsum-c/-/blob/main/tools/sigsum-compile-policy.c?ref_type=heads) and re-implemented by us in [sigsum-ts](https://github.com/freedomofpress/sigsum-ts).
 
 #### 4.2 `witnesses`
 This field MUST be a dictionary mapping witness identifiers (strings) to base64-encoded Ed25519 public keys.
