@@ -1,8 +1,9 @@
-## Manifest
+# Manifest
 
-This specification defines the manifest format, used to declare the cryptographic integrity and Content Security Policies of a web application.
+This specification defines the manifest format used to declare the cryptographic integrity and Content Security Policies of a web application.
 
-### 1. Manifest Format
+## 1. Manifest Format
+
 Each enrolled web application must serve a JSON manifest with the following top-level structure:
 
 ```json
@@ -12,27 +13,86 @@ Each enrolled web application must serve a JSON manifest with the following top-
 }
 ```
 
-#### 1.1 `manifest` object
+## 1.1 `manifest` object
 
-This object describes the application version, default CSP policy, optional per-path overrides, and expected hashes of relevant resources.
+This object describes the application metadata, CSP rules, required file hashes, index/fallback mapping, and Sigsum timestamp.
 
-##### Fields:
+### Required fields
 
-* `app_url` (string): URL of the upstream project. **Required.**
-* `app_version` (string): Version identifier. **Required.**
-* `wasm` (array of strings): List of SHA-256 hashes (hex) of WebAssembly binaries. **Optional.**
-* `default_csp` (string): The global Content-Security-Policy to enforce. Must be present and must apply to all paths. **Required.**
-* `extra_csp` (object): An object mapping URL paths to CSP strings that override the default for specific paths. Keys are paths (e.g., `/viewer/index.html`), and values are CSP policy strings. The strongest matching path prefix determines which CSP is applied — e.g., a policy defined for `/data/` applies to all nested paths like `/data/file.js`, unless a more specific rule (like `/data/manager/index.html`) exists. **Optional.**
-* `files` (object): An object mapping relative URL paths to SHA-256 hashes (hex). Keys must include trailing slashes for directories and refer to `index.html` or `index.htm` as applicable. **Required.**
+* `app` (string)
+  URL of the upstream project.
 
-#### 1.2 `signatures` object
+* `version` (string)
+  Application version identifier.
 
-This object maps Ed25519 public keys (encoded as multibase, base64url, or raw hex) to their corresponding Sigsum proof objects.
+* `default_csp` (string)
+  The global Content-Security-Policy to enforce for all paths not covered by `extra_csp`.
 
-Each value in the object is a Sigsum proof structure containing:
+* `files` (object)
+  Map of relative paths to SHA-256 hashes (base64url).
 
-**TODO**
+* `default_index` (string)
+  Path within `files` that resolves the root (`/`).
 
-Each manifest must be signed by at least one Ed25519 key.
+  Example:
+
+  ```json
+  "default_index": "/index.html"
+  ```
+
+* `default_fallback` (string)
+  Path within `files` to serve for non-existent `main_frame` paths. Can be used for SPA catch-alls, rewrites, custom error pages.
+
+  Example:
+
+  ```json
+  "default_fallback": "/404.html"
+  ```
+
+* `timestamp` (string)
+  A Sigsum tree head satisfying the Sigsum policy specified during enrollment, in ASCII text format with escaped newlines (`\\n`).
+
+  Example:
+
+  ```
+  "timestamp": "tree_size 12345\\nroot_hash aabbcc...\\ntimestamp 1734567890\\nwitness test1 deadbeef..."
+  ```
+
+### Optional fields
+
+* `wasm` (array of strings)
+  List of SHA-256 hashes (base64url) of WebAssembly binaries.
+
+* `extra_csp` (object)
+  Map of path prefixes to CSP strings. Longest‐prefix matching applies.
+  
+  Example:
+
+  ```json
+  "extra_csp": {
+    "/admin/": "default-src 'self'; ..."
+  }
+  ```
 
 
+## 1.2 `signatures` object
+
+Maps Ed25519 public keys to Sigsum proofs. Each key is an Ed25519 public key encoded as base64url.
+
+### Value format
+
+Each value is a Sigsum proof, in ASCII text with escaped newlines.
+
+Example:
+
+```json
+"signatures": {
+  "f0ab12...": "tree_size 12345\\nroot_hash 9c18...\\nsignature abcd...\\nwitness t1 deadbeef..."
+}
+```
+
+### Validation rules
+
+* The manifest must contain at least `threshold` valid signature and proofs.
+* Signatures are verified over the canonicalized `manifest` object.
+* Each proof must satisfy the enrollment policy.
