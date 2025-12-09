@@ -38,118 +38,130 @@ The latest [`LightBlock`](https://docs.cometbft.com/v0.34/spec/core/data_structu
 Clients verify:
 
 1. The `ValidatorSet` corresponds to the validator set shipped in their WEBCAT extension.
-2. The validator signatures in the commit are valid for the corresponding block.
-
-TODO: other stuff?
+2. The commit contains valid signatures from validators representing $\gt 2/3$ of the total voting power in the `ValidatorSet`.
 
 ## Enrollment
 
-Chain parameters:
-- `MAX_NUMBER_SUBDOMAINS`: the maximum number of subdomains per domain to rate-limit abuse.
-- `NUM_REQUIRED_ORACLES`: the number of oracle observations that must post a response to the chain
-- `COOLDOWN_BLOCKS`: the number of blocks that must elapse before the domain is allowed to move from the pending set to the active set.
-- `TIMEOUT_BLOCKS`: if insufficient oracle observations arrive within this number of blocks, the enrollment request expires.
+Chain parameters (configured in the chain's `OracleConfig`):
+- `max_enrolled_subdomains`: the maximum number of subdomains per registered domain to rate limit abuse
+- `voting_config.quorum`: the number of oracle votes required to reach consensus on an observation
+- `voting_config.total`: the total number of authorized oracles
+- `voting_config.delay`: the time delay that must elapse before a pending enrollment change is applied to canonical state (this is the "cooldown" period)
+- `voting_config.timeout`: the time after which individual votes expire if quorum is not reached
+- `observation_timeout`: the maximum age of a blockstamp in an observation transaction
 
-### `EnrollmentRequest`
+### Enrollment Flow
 
-Invariants:
-- Non-concurrent: There cannot be multiple enrollment requests for a domain.
+The enrollment process consists of:
 
-The enrollment process involves:
-1. User publishes the domain's enrollment policy (see `server.md`) at:
+1. Domain owner publishes the domain's enrollment policy (see `server.md`) at:
 
 ```
 https://<domain>/.well-known/webcat/enrollment.json
 ```
 
-2. User submits an `EnrollmentRequest` to the chain.
-3. Transaction validation (`CheckTx`/`DeliverTx`)
+2. Domain owner (or a frontend acting on their behalf) submits an enrollment request off-chain to the oracle set. This request instructs oracles to observe the domain's enrollment file.
 
-To unenroll, clients must remove the enrollment JSON and oracles verify that path produces a 404 or 410.
+3. Each oracle independently:
+   - Fetches the enrollment file from the domain
+   - Validates the file and computes its canonical hash
+   - Posts an `Observe` transaction to the chain
+
+4. The chain processes observations through a voting mechanism (see below).
+
+To unenroll, domain owners remove the enrollment JSON file, and oracles verify that the path produces a 404 or 410 status code.
+
+### Oracle Observation Process
+
+When an oracle receives an off-chain enrollment request, it:
+
+1. Fetches:
+
+```
+https://<domain>/.well-known/webcat/enrollment.json
+```
+
+2. Validates:
+- The HTTPS certificate is valid (hostname matches, chain trusted, not expired/revoked)
+- The response is either:
+    - A correctly formatted policy JSON (HTTP 200)
+    - A 404 (Not Found) or 410 (Gone) for unenrollment
+
+3. Computes:
+- If the file exists: canonical hash of the enrollment JSON (SHA-256 of canonicalized JSON)
+- If 404/410: a `NotFound` marker
+
+4. Gets the latest block information from the chain (block height and `app_hash`)
+
+5. Creates and signs an `Observe` transaction containing the observation
+
+6. Broadcasts the signed transaction to the chain
 
 #### Structure
 
-An `EnrollmentRequest` contains (TODO):
-- domain
-- `signers`: a list of Ed25519 public keys
+The `Observe` action contains:
+- `oracle`: the oracle's identity (ECDSA P-256 public key)
+- `observation`:
+  - `domain`: the domain being observed (must be a strict subdomain of `zone`)
+  - `zone`: the zone (registered domain) under which the domain is being enrolled
+  - `hash_observed`: either a SHA-256 hash of the canonicalized enrollment JSON, or `NotFound` for 404/410
+  - `blockstamp`:
+    - `block_height`: the block height at which the observation was made
+    - `app_hash`: the application hash from that block
+- `signature`: ECDSA P-256 signature of the transaction
 
 #### `CheckTx`/`DeliverTx`
 
-We validate:
-- `MAX_NUMBER_SUBDOMAINS` per domain has not been reached. This is done
-by checking against other domains in the active set.
+When processing an `Observe` transaction, the chain validates:
 
-TODO: Move this validation of subdomains into the oracles
+- The oracle is authorized (their public key is in the current `OracleConfig`)
+- The blockstamp is not in the future
+- The blockstamp is not too old (within `observation_timeout`)
+- The blockstamp's `app_hash` matches the recorded `app_hash` for that block height
+- The observed domain is a strict subdomain of the specified zone
+- If enrolling a new subdomain: the number of subdomains under the registered domain would not exceed `max_enrolled_subdomains`
+- If unenrolling: the subdomain exists in canonical state or is pending enrollment
 
-The pending set tracks domains awaiting oracle observations. Each entry contains:
+If validation passes, the observation is added to the oracle voting queue as a vote.
 
-- `domain`: the domain name
-- `request_height`: the block height when the request was submitted
-- `enrollment_data`: the signing data from the enrollment request
-- `oracle_observations`: oracle responses received so far (TODO do we need this?)
+#### Voting Mechanism
 
-Upon a new validated enrollment request:
-- If no pending request exists for the domain, we add it to the pending set.
-- If a pending request already exists for that domain, we drop it.
+The chain uses a vote queue to reach consensus on enrollment changes:
 
-Note that a domain can be in the active set and there can be an update in the pending set.
+1. Each oracle observation is cast as a vote in the voting queue, keyed by subdomain where the value is the observed SHA256 hash.
+
+2. Votes accumulate until a quorum of oracles (configured via chain parameter `voting_config.quorum`) vote for the same hash value for a given subdomain.
+
+3. Once quorum is reached, the winning hash is moved to a pending queue with a timestamp. The pending change waits for a configured cooldown delay period (`voting_config.delay`) before being applied.
+
+4. If a new value for the same subdomain reaches quorum while a pending change is waiting, the new value overwrites the existing pending change and the cooldown delay timer resets. However, if the new value is identical to the existing pending value, the timer is not reset (to prevent DoS attacks that prevent enrollment).
+
+5. Individual votes expire after `voting_config.timeout` if quorum is not reached.
 
 #### `EndBlock`
 
-We iterate through all new oracle observations in the block and:
-- Add the observation to the appropriate entry in the pending set.
+At the end of each block:
 
-We iterate through all domains in the pending set and verify:
-- At least `NUM_REQUIRED_ORACLES` matching observations have been submitted, i.e. all responses agree on the `response_hash` provided in the oracle observation
-- `COOLDOWN_BLOCKS` have elapsed since the request height
-- `TIMEOUT_BLOCKS` has not yet elapsed
+1. We remove votes that have exceeded the timeout period.
 
-If both checks pass, we promote the domain from the pending to active set, i.e. removing from the pending set, and adding to the active set.
+2. For any pending enrollment changes where the delay period has elapsed, we promote them to canonical state by updating the canonical hash for that subdomain.
 
-### `OracleObservation`
-
-For each new domain in the pending set, oracles:
-
-1. Fetch:
-
-```
-https://<domain>/.well-known/webcat/enrollment.json
-```
-
-2. Validate:
-- The HTTPS certificate is valid (hostname matches, chain trusted, not expired/revoked).
-- The response is either:
-    - A correctly formatted policy JSON
-    - A 404 or 410 (Gone) for unenrollment
-
-3. Returns:
-- Hash of the file (or a marker for 404/410)
-- Success/Failure
-
-4. Post observation to the chain.
-
-#### Structure
-
-The `OracleObservation` should contain:
-- `domain`: the domain being observed
-- `request_height`: block height of the original enrollment request
-- `observation_height`: block height when this observation was made
-- `http_status_code`: code returned on fetch, e.g. 200, 404, 410
-- `response_hash`: SHA256 hash of the enrollment.json file, or Null if 404/410 or error occurs
-- `oracle_id`: public key of the oracle making this observation
-- `signature`: Ed25519 signature of the observation data
+3. Similarly process any pending configuration changes from admin voting.
 
 ## Snapshot
 
 The snapshot is:
-- a serialization of the enrollment subtree of the application state
-- a merkle proof to the AppHash
+- a serialization of the canonical enrollment subtree of the application state
+- a merkle proof from the root of the canonical enrollment subtree to the AppHash
 
 TODO: Include back of the envelope numbers
 
 The snapshot is deterministic: by using the state at a particular block height, all full nodes will produce identical snapshots.
 
-The snapshot enables users to verify inclusion of a domain using the snapshot, Merkle proof, and latest `LightBlock`. The `LightBlock` contains validator signatures that cryptographically prove the `AppHash` was committed by the consensus network.
+The snapshot enables users to verify inclusion of a domain using the snapshot, Merkle proof, and latest `LightBlock`. Clients must:
+1. Validate the `LightBlock` validator signatures using the validator set hardcoded in the extension. This cryptographically binds the `LightBlock` to a specific `AppHash` committed by the consensus network.
+2. Reconstruct the Merklized canonical enrollment subtree from the provided serialized leaves, computing the canonical enrollment root hash.
+3. Verify the Merkle proof that demonstrates the canonical enrollment root hash is included in the application state tree, whose root is the `AppHash` from the `LightBlock`.
 
 Operationally, we'll scrape the state from a node and push it to a CDN. This can be done through a serverless cron job.
 
