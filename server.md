@@ -1,5 +1,5 @@
 ## Server configuration
-To participate in the WEBCAT integrity verification system, a website MUST advertise a cryptographic enrollment policy via a well-known path. This policy defines the set of trusted signers, the signature threshold, and the Sigsum-based policy used to validate the transparency logging signed manifest updates.
+To participate in the WEBCAT integrity verification system, a website MUST advertise a cryptographic enrollment policy at a well-known path. This policy defines the trust material and the constraints used to validate signatures, transparency proofs, and optionally provenance information.
 
 ### 1. Well-Known Enrollment Path
 
@@ -9,21 +9,28 @@ Websites MUST serve their enrollment policy at:
 https://<domain>/.well-known/webcat/enrollment.json
 ```
 
+The enrollment policy is discovered asynchronously by clients during the first HTTP request and cached for the duration of the browser' session. This approach eliminates the overhead of including policy data in every HTTP response. However, websites have menchanisms to signal that the information MUST be refreshed.
+
+
+#### 1.1 Field Definitions (Sigsum)
 This endpoint MUST return a JSON object with the following structure:
 
 ```json
 {
+  "type": "sigsum",
   "signers": ["<base64url-ed25519-public-key>", "..."],
   "threshold": <integer>,
   "policy": "<base64url-sigsum-policy>",
   "max_age": <integer>,
-  "cas_url": "<url>"
+  "cas_url": "<url>",
+  "logs": {
+    "<base64url-log-public-key>": "<url>"
+  }
 }
 ```
 
-The enrollment policy is discovered by clients during the enrollment process and cached for the duration of the domain's enrollment. This approach eliminates the overhead of including policy data in every HTTP response.
-
-#### 1.1 Field Definitions
+- `type`:
+  The enrollment type. For Sigsum enrollments this MUST be set to `"sigsum"`.
 
 - `signers`:
   An array of Ed25519 public keys, base64-encoded. These keys are authorized to sign WebCAT manifest files for the domain.
@@ -44,6 +51,39 @@ The enrollment policy is discovered by clients during the enrollment process and
     - signed manifest objects,
     - all immutable resources referenced inside the manifest (e.g., WASM binaries, HTML, JS, CSS, auxiliary files).
 
+- `logs`:
+  A mapping of Sigsum log public keys (base64url-encoded) to their corresponding log URLs. The enrollment generator includes this mapping, based on the Sigsum trust policy, to help clients locate logs for the purpose of monitoring and auditing.
+
+#### 1.2 1.1 Field Definitions (Sigstore)
+
+Sigstore enrollments use the following structure:
+
+```json
+{
+  "type": "sigstore",
+  "trusted_root": { "...": "..." },
+  "identity": "<oidc-identity>",
+  "issuer": "<oidc-issuer>",
+  "max_age": <integer>
+}
+```
+
+- `type`:
+  The enrollment type. For Sigstore enrollments this MUST be set to `"sigstore"`.
+
+- `trusted_root`:
+  A Sigstore trusted root JSON document.
+
+- `identity`:
+  The expected OIDC identity claim for signing certificates.
+
+- `issuer`:
+  The expected OIDC issuer for signing certificates.
+
+- `max_age`:
+  An integer representing the maximum number of seconds a manifest may remain valid after its certificate issuance timestamp.
+
+
 ### 2. Policy Transition Mechanism
 
 To transition from one enrollment policy to another, servers MUST follow a strict protocol to ensure uninterrupted verification across all clients.
@@ -55,6 +95,8 @@ When initiating a policy change:
 - The new policy MUST be served persistently at `/.well-known/webcat/enrollment.json`.
 - The previous policy SHOULD be served at `/.well-known/webcat/enrollment-prev.json`.
 - The values of the two files MUST differ.
+
+TODO: describe here or in client validation how to signal a refresh for the client.
 
 #### 2.2 Enrollment Observation Period
 
@@ -83,10 +125,10 @@ To ensure full compatibility throughout this staggered rollout:
 
 ```json
 // /.well-known/webcat/enrollment.json
-{ "signers": [...], "threshold": 2, ... }
+{ "type": "sigsum", "signers": [...], "threshold": 2, ... }
 
 // /.well-known/webcat/enrollment-prev.json
-{ "signers": [...], "threshold": 3, ... }
+{ "type": "sigstore", "trusted_root": [...], "issuer": "...", ... }
 ```
 
 In this example, the server is advertising a new policy requiring 2 signers, while still supporting the older 3-signer policy during the transition window.
