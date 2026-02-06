@@ -9,7 +9,7 @@ Websites MUST serve their enrollment policy at:
 https://<domain>/.well-known/webcat/enrollment.json
 ```
 
-The enrollment policy is discovered asynchronously by clients during the first HTTP request and cached for the duration of the browser' session. This approach eliminates the overhead of including policy data in every HTTP response. However, websites have menchanisms to signal that the information MUST be refreshed.
+The enrollment policy is discovered asynchronously by clients during the first HTTP request and cached for the duration of the browser session. This approach eliminates the overhead of including policy data in every HTTP response. However, websites have mechanisms to signal that the information MUST be refreshed.
 
 
 #### 1.1 Field Definitions (Sigsum)
