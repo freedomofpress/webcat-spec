@@ -33,12 +33,15 @@ The chain itself does not enforce expiry; clients check the expiry using the con
 
 ### CDN Publishing
 
-The latest [`LightBlock`](https://docs.cometbft.com/v0.34/spec/core/data_structures#lightblock) consensus data will be published to a CDN daily.
+The latest [`LightBlock`](https://docs.cometbft.com/v0.38/spec/core/data_structures#lightblock) consensus data is published to a CDN hourly.
 
-Clients verify:
+The `LightBlock` consists of:
 
-1. The `ValidatorSet` corresponds to the validator set shipped in their WEBCAT extension.
-2. The commit contains valid signatures from validators representing $\gt 2/3$ of the total voting power in the `ValidatorSet`.
+* `Header`: contains the `AppHash`, `ValidatorsHash`, consensus timestamp, block height, and other chain metadata such as the `ChainID`
+* `Commit`: contains the `BlockID` (which includes the hash of the header) and a list of `CommitSig`s — each being a validator's signature over a `CanonicalVote` for that block
+* `ValidatorSet`: the set of validators and their voting power at that height
+
+See "Light Client Verification" for more detail on the verification performed of the CDN data.
 
 ## Enrollment
 
@@ -158,11 +161,19 @@ TODO: Include back of the envelope numbers
 
 The snapshot is deterministic: by using the state at a particular block height, all full nodes will produce identical snapshots.
 
-The snapshot enables users to verify inclusion of a domain using the snapshot, Merkle proof, and latest `LightBlock`. Clients must:
-1. Validate the `LightBlock` validator signatures using the validator set hardcoded in the extension. This cryptographically binds the `LightBlock` to a specific `AppHash` committed by the consensus network.
-2. Reconstruct the Merklized canonical enrollment subtree from the provided serialized leaves, computing the canonical enrollment root hash.
-3. Verify the Merkle proof that demonstrates the canonical enrollment root hash is included in the application state tree, whose root is the `AppHash` from the `LightBlock`.
+### Light Client Verification
 
-Operationally, we'll scrape the state from a node and push it to a CDN. This can be done through a serverless cron job.
+The snapshot enables users to verify inclusion of a domain using the snapshot, Merkle proof, and latest `LightBlock`. Clients must:
+1. Verify the `ValidatorSet` on the `LightBlock` matches the validator set hardcoded in the extension.
+2. Verify `Hash(ValidatorSet) == header.ValidatorsHash` to confirm the validator set used for signature verification is the one committed to in the header.
+3. Compute `header_hash = MerkleRoot(header)` using  [CometBFT's (Merkle) header hashing scheme](https://github.com/cometbft/cometbft/blob/main/spec/core/data_structures.md#header).
+4. Verify `header_hash == commit.BlockID.Hash`, binding the header (and therefore the `AppHash`) to the `BlockID` that validators signed over.
+5. For each `CommitSig` with `BlockIDFlag == BLOCK_ID_FLAG_COMMIT`, reconstruct the `CanonicalVote` (using the commit's `Height`, `Round`, `BlockID`, the signature's `Timestamp`, and the `ChainID`) and verify the signature against the corresponding validator's public key.
+6. Confirm the signing validators represent >2/3 of total voting power.
+7. Extract the `AppHash` from the now authenticated header.
+8. Reconstruct the Merklized canonical enrollment subtree from the provided serialized leaves, computing the canonical enrollment root hash.
+9. Verify the Merkle proof that demonstrates the canonical enrollment root hash is included in the application state tree, whose root is the `AppHash` from step 7.
+
+Operationally, we scrape the state (`LightBlock`, leaves of canonical state, and merkle proof of inclusion) from a node and push it to a CDN through a serverless cron job.
 
 Optionally, we could compute and publish incremental diffs relative to previous snapshots to reduce bandwidth usage.
