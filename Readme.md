@@ -4,7 +4,6 @@ The spec is divided per-component:
  - [Manifest](manifest.md): (WIP) Web application manifest specification.
  - [CSP](csp.md): (WIP) Allowed and required CSP directives within manifests.
  - [Enrollment](enrollment.md): Enrollment and WEBCAT snapshot specification for the WEBCAT infrastructure.
- - [Client](client.md): (TODO) Client update, server and manifest validation specification.
 
 See also:
  - [WEBCAT repository](https://github.com/freedomofpress/webcat)
