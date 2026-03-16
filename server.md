@@ -54,7 +54,7 @@ This endpoint MUST return a JSON object with the following structure:
 - `logs`:
   A mapping of Sigsum log public keys (base64url-encoded) to their corresponding log URLs. The enrollment generator includes this mapping, based on the Sigsum trust policy, to help clients locate logs for the purpose of monitoring and auditing.
 
-#### 1.2 1.1 Field Definitions (Sigstore)
+#### 1.2 Field Definitions (Sigstore)
 
 Sigstore enrollments use the following structure:
 
@@ -62,27 +62,39 @@ Sigstore enrollments use the following structure:
 {
   "type": "sigstore",
   "trusted_root": { "...": "..." },
-  "identity": "<oidc-identity>",
-  "issuer": "<oidc-issuer>",
+  "claims": {
+    "2.5.29.17": "alice@example.com",
+    "1.3.6.1.4.1.57264.1.8": "https://token.actions.githubusercontent.com"
+  },
   "max_age": <integer>
 }
 ```
 
-- `type`:
+* `type`:
   The enrollment type. For Sigstore enrollments this MUST be set to `"sigstore"`.
 
-- `trusted_root`:
+* `trusted_root`:
   A Sigstore trusted root JSON document.
 
-- `identity`:
-  The expected OIDC identity claim for signing certificates.
+* `claims`:
+  A JSON object mapping certificate extension OIDs to their expected string values.
 
-- `issuer`:
-  The expected OIDC issuer for signing certificates.
+  Each entry represents a constraint that MUST be satisfied by the signing certificate. All claim conditions are evaluated as a logical **AND**. If any claim fails to match, verification fails. OIDs correspond to X.509 certificate extensions. For example:
 
-- `max_age`:
+  * `"2.5.29.17"` — Subject Alternative Name (SAN).
+    This matches any SAN entry (e.g., `rfc822Name`, `URI`, or Fulcio `otherName`) whose value exactly equals the expected string.
+
+  * `"1.3.6.1.4.1.57264.1.8"` — Fulcio OIDC Issuer (V2).
+
+  * `"1.3.6.1.4.1.57264.1.5"` — GitHub Workflow Repository.
+
+  This mechanism allows fine-grained validation of supply chain attributes, regardless of whether they are predefined or custom. In a bring-your-own Sigstore deployment, custom certificate extensions can be specified and validated via this mechanism. The semantic meaning of an OID is determined by the issuing certificate authority referenced in `trusted_root`.
+
+  For a list of Fulcio OIDs used by GitHub Actions, see:
+  [https://github.com/sigstore/fulcio/blob/main/docs/oid-info.md](https://github.com/sigstore/fulcio/blob/main/docs/oid-info.md)
+
+* `max_age`
   An integer representing the maximum number of seconds a manifest may remain valid after its certificate issuance timestamp.
-
 
 ### 2. Policy Transition Mechanism
 
