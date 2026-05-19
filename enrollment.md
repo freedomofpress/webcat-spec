@@ -177,3 +177,32 @@ The snapshot enables users to verify inclusion of a domain using the snapshot, M
 Operationally, we scrape the state (`LightBlock`, leaves of canonical state, and merkle proof of inclusion) from a node and push it to a CDN through a serverless cron job.
 
 Optionally, we could compute and publish incremental diffs relative to previous snapshots to reduce bandwidth usage.
+
+## Appendix: ENS Enrollment
+
+WEBCAT supports enrollment of websites accessed through ENS names whose `contenthash` record resolves to immutable content-addressed storage (e.g. IPFS). Only the oracle's resolution path differs from the clearnet enrollment process.
+
+### Enrollment Flow
+
+1. The site author publishes site content to IPFS such that the enrollment policy is reachable at `<CID>/.well-known/webcat/enrollment.json`.
+2. The site author sets the ENS `contenthash` record for their name (e.g. `example.eth`) to that CID.
+3. The site author submits an enrollment request off-chain to the oracle set, referencing the ENS name.
+4. Oracles independently perform the ENS-specific observation process described below.
+5. The chain processes observations through the existing voting and cooldown mechanism unchanged.
+
+The value committed to the chain is the canonical hash of `enrollment.json`, not the ENS `contenthash`. Subsequent site content changes do not require re-enrollment. Re-enrollment is only required when the enrollment policy itself changes, such as signer rotation, at which point the new policy must clear the existing cooldown period before clients honor it.
+
+To unenroll, the site author publishes a new CID whose content does not include `.well-known/webcat/enrollment.json` and updates the ENS `contenthash` to point to it. Oracles then submit a `NotFound` observation exactly as for clearnet unenrollment.
+
+### Oracle Observation
+
+For an ENS observation, the oracle:
+
+1. Resolves the ENS `contenthash` record via its own Ethereum RPC provider, yielding a content-addressed identifier (e.g. an IPFS CID).
+2. Fetches `<CID>/.well-known/webcat/enrollment.json` via IPFS. The oracle MAY use a local IPFS node or a trusted gateway.
+3. Validates and canonicalizes the response exactly as for the clearnet flow.
+4. Submits an `Observe` transaction for the ENS name.
+
+### Client Verification
+
+Enrollment can be verified against the committed snapshot only, clients MUST NOT make an additional network round trip during verification.
