@@ -53,9 +53,8 @@ document specifies only the onion-specific differences.
   acts as the rate limit. Generating a proof already takes ~8 minutes
   of CPU time and several GB of RAM (Section 4.2), which is a
   meaningful rate limit on its own. If empirically this turns out to
-  be insufficient, an explicit proof-of-work or stake-based
-  mechanism can be layered on top of the submission without changing
-  the rest of the protocol.
+  be insufficient, an explicit proof-of-work mechanism can be layered
+  on top of the submission without changing the rest of the protocol.
 - Efficient lookup. Browsers that already know a `.onion` can find the
   matching enrollment in `O(1)` from the address alone, without scanning the
   list.
@@ -211,8 +210,7 @@ The chain accepts the submission iff:
 
 - `sig_wc` verifies under `KP_wc_blind` over `statement`.
 - `sig_tor` verifies under `KP_hs_blind` over `statement`.
-- `period_num` is the current Tor time period (within a small tolerance
-  for boundary submissions — see TODO below).
+- `period_num` is the current Tor time period (TODO: do we need tolerance?).
 - The zero-knowledge proof verifies under the WEBCAT-onion verifying
   key against the public-input vector flattened from `KP_wc_blind`,
   `KP_hs_blind`, `period_num`, and `period_length`.
@@ -250,8 +248,8 @@ subtree (Section 6.2) that browsers do not download.
 The proof asserts knowledge of `KP_hs_id` such that, given the public
 inputs `(KP_wc_blind, KP_hs_blind, period_num, period_length)`:
 
-1. There exists an Ed25519 point `pk_point` whose canonical 32-byte
-   encoding is `pk_bytes`,
+1. `pk_bytes` is the canonical 32-byte encoding of `KP_hs_id`, and
+`pk_point` is the Ed25519 point it decodes to,
 2. `pk_point` lies on the Ed25519 curve and in its prime-order subgroup,
 3. `KP_wc_blind = [h_wc(pk_bytes)] · pk_point`,
 4. `KP_hs_blind = [h_tor(pk_bytes, period_num, period_length)] · pk_point`,
@@ -290,10 +288,6 @@ practical to prove and cheap to verify.
 | Proof size (compressed) | 192 B |
 | Public input vector | 70 field scalars |
 
-Production deployment selects, fixes, and audits a concrete proof
-system separately; the figures above should be expected to shift with
-that choice. Choice of proof system is part of that selection, see §7.
-
 ### 4.3 Failure consequences
 
 If the proof system is sound, the chain's invariant *"one chain entry =
@@ -325,7 +319,8 @@ time by the oracle set.
 
 ### 5.1 Expiry, renewal, and re-enrollment
 
-Every accepted submission sets the record's `expiry` to 6 months
+Every accepted submission sets the record's `expiry` to a system
+configurable `record_ttl`.
 from the submission time (in the case of a pending change, from its
 promotion time — see §5.2). A record whose `expiry` has passed and
 which is not protected by either a pending change (§5.2) or an active
@@ -339,7 +334,7 @@ block (§5.3) is purged at the next `EndBlock`.
   present in canonical state, because it was never enrolled, was
   purged after expiry, or was purged after a 6-month block (§5.3) —
   is treated as a first enrollment. Accepted immediately;
-  `expiry := submission_time + 6 months`.
+  `expiry := submission_time + record_ttl`.
 
 Because `KP_wc_blind` is stable per `.onion`, the chain detects
 renewals (same lookup key, new submission) without learning the
@@ -351,11 +346,12 @@ zero-knowledge proof and signed statement.
 - A change submission is identified by a non-zero `policy_hash` that
   differs from the current canonical `policy_hash` for an existing
   `KP_wc_blind`.
-- The change enters a pending state and remains pending for a
-  1-week observation period before promotion to canonical state.
+- The change enters a pending state and remains pending for an
+  observation period defined by system config before promotion
+  to canonical state.
   During the wait, the previous canonical policy remains in effect.
 - On promotion, the canonical `policy_hash` is replaced and the
-  record's `expiry` is set to `promotion_time + 6 months`.
+  record's `expiry` is set to `promotion_time + record_ttl`.
 - The pending entry is publicly observable, so monitors of the chain
   can detect a change attempt against a domain they care about
   (§5.5).
@@ -374,7 +370,7 @@ zero-knowledge proof and signed statement.
 - The operator can submit a block by signing the normal statement format
   with `policy_hash = 0x00…00` (32 zero bytes). A block immediately sets the
   canonical record's policy to that reserved sentinel value and locks it for
-  6 months.
+  `record_ttl`.
 - While blocked, any submission for that `KP_wc_blind` with a
   non-zero `policy_hash` is rejected. There is no path out of a
   block other than waiting for its 6-month expiry. A fresh block
@@ -469,5 +465,4 @@ submission.
 
 The audit log is not purged when the corresponding canonical
 record is purged. The canonical record may disappear at expiry, but
-its history of accepted submissions remains in the audit log for as
-long as the chain retains it (Section 6.4).
+its history of accepted submissions remains in the audit log.
