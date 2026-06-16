@@ -42,7 +42,7 @@ This endpoint MUST return a JSON object with the following structure:
   A base64-encoded string representing the compiled Sigsum policy. This includes the list of witnesses, group definitions, and quorum requirements. See [Sigsum Policy Format](#sigsum-policy-format) for details.
 
 - `max_age`:
-  An integer representing the maximum number of seconds a manifest may remain valid after its signing timestamp. Since different signatures might have different inclusion times, `max_age` is always counted from the oldest one. The timestamp is verified against the CometBFT chain's AppHash as described in the enrollment specification.
+  An integer representing the maximum number of seconds a manifest may remain valid after its witnessed timestamp. The manifest's `timestamp` is a Sigsum cosigned tree head (see [Manifest](manifest.md)); the client verifies it against the trust `policy` — the tree head must be signed by a log key in the policy and cosigned by a witness quorum — and derives the reference time as the median of the verified witness cosignature timestamps. Freshness is then evaluated as `now - median_timestamp > max_age`.
 
 - `cas_url`:
   The base URL of the Content Addressable Storage (CAS) which will be used to verify artifact availability.
@@ -52,7 +52,7 @@ This endpoint MUST return a JSON object with the following structure:
     - all immutable resources referenced inside the manifest (e.g., WASM binaries, HTML, JS, CSS, auxiliary files).
 
 - `logs`:
-  A mapping of Sigsum log public keys (base64url-encoded) to their corresponding log URLs. The enrollment generator includes this mapping, based on the Sigsum trust policy, to help clients locate logs for the purpose of monitoring and auditing.
+  A mapping of Sigsum log public keys (base64url-encoded) to their corresponding log URLs. The enrollment generator includes this mapping, based on the Sigsum trust policy, to help clients locate logs for the purpose of monitoring and auditing. This field is REQUIRED and MUST contain at least one entry; clients reject a Sigsum enrollment whose `logs` map is missing or empty.
 
 #### 1.2 Field Definitions (Sigstore)
 
@@ -82,7 +82,12 @@ Sigstore enrollments use the following structure:
   Each entry represents a constraint that MUST be satisfied by the signing certificate. All claim conditions are evaluated as a logical **AND**. If any claim fails to match, verification fails. OIDs correspond to X.509 certificate extensions. For example:
 
   * `"2.5.29.17"` — Subject Alternative Name (SAN).
-    This matches any SAN entry (e.g., `rfc822Name`, `URI`, or Fulcio `otherName`) whose value exactly equals the expected string.
+    This matches any SAN entry (e.g., `rfc822Name`, `URI`, or Fulcio `otherName`) that satisfies the expected value per the matching rule below.
+
+  Expected values are matched against the certificate as follows, and the same rule applies to both SAN entries and generic extension values:
+
+  * Exact match (default): the certificate value MUST equal the expected string exactly.
+  * Prefix match: if the expected string begins with a caret (`^`), the leading `^` is stripped and the certificate value MUST start with the remaining string. For example `"^https://github.com/example/"` matches any identity under that path.
 
   * `"1.3.6.1.4.1.57264.1.8"` — Fulcio OIDC Issuer (V2).
 
@@ -96,6 +101,44 @@ Sigstore enrollments use the following structure:
 * `max_age`
   An integer representing the maximum number of seconds a manifest may remain valid after its certificate issuance timestamp.
 
+The `type` field is REQUIRED on every enrollment object; clients reject an enrollment that omits it or carries an unrecognized value.
+
+#### 1.3 Browser-facing bundle
+
+While `enrollment.json` is the artifact observed by oracles and committed to the enrollment chain, browsers fetch a bundle that packages the enrollment together with the signed manifest, served at:
+
+```
+https://<domain>/.well-known/webcat/bundle.json
+```
+
+The bundle is a JSON object:
+
+```json
+{
+  "enrollment": { ... },   // identical to the enrolled enrollment.json
+  "manifest":   { ... },   // the `manifest` object (see manifest.md)
+  "signatures": ...         // the `signatures` value (see manifest.md)
+}
+```
+
+The `enrollment` member MUST canonicalize to exactly the bytes that were enrolled, so that its hash matches the canonical hash committed on-chain; otherwise the client rejects the origin. During a policy transition the previous bundle SHOULD additionally be served at `/.well-known/webcat/bundle-prev.json` (see §2), and clients fall back to it when the current bundle's enrollment does not match the committed hash.
+
+As an optimization, a server MAY instead deliver the enrollment inline on the main document response via the header:
+
+```
+x-webcat-enrollment: <base64url-encoded enrollment JSON>
+```
+
+When present, the client uses this value in place of fetching the bundle's enrollment, which removes the blocking background fetch from the verification path. The supplied enrollment is still subject to the same canonical-hash check against the committed state.
+
+#### 1.4 Response Header Constraints
+
+To keep the served resources unambiguously matchable against the manifest, the client enforces the following on responses for enrolled origins:
+
+- `content-security-policy` MUST be present on document responses and MUST NOT appear more than once.
+- The `refresh` and `link` headers are rejected outright (they provide alternative navigation/preload paths that bypass manifest matching).
+- The `location` header is permitted only on main-frame / sub-frame navigations and only as a relative redirect (a path beginning with `/`, `./`, or `../`, never a scheme-relative `//`, absolute URL, or one containing `\`).
+
 ### 2. Policy Transition Mechanism
 
 To transition from one enrollment policy to another, servers MUST follow a strict protocol to ensure uninterrupted verification across all clients.
@@ -104,11 +147,19 @@ To transition from one enrollment policy to another, servers MUST follow a stric
 
 When initiating a policy change:
 
-- The new policy MUST be served persistently at `/.well-known/webcat/enrollment.json`.
-- The previous policy SHOULD be served at `/.well-known/webcat/enrollment-prev.json`.
+- The new policy MUST be served persistently at `/.well-known/webcat/enrollment.json` (and, for browsers, embedded in `/.well-known/webcat/bundle.json`).
+- The previous policy SHOULD be served at `/.well-known/webcat/enrollment-prev.json`, with its corresponding bundle at `/.well-known/webcat/bundle-prev.json`.
 - The values of the two files MUST differ.
 
-TODO: describe here or in client validation how to signal a refresh for the client.
+##### Signaling a refresh
+
+A server signals that a client should re-fetch and re-verify before honoring cached content by setting, on the main document response:
+
+```
+x-webcat-version: <application version>
+```
+
+When the advertised version is newer (semver comparison) than the `version` in the client's cached manifest, the client purges its cached origin state and browser caches for the origin and reloads, picking up the new bundle.
 
 #### 2.2 Enrollment Observation Period
 
