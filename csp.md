@@ -5,6 +5,10 @@ This document defines the subset of Content Security Policy (CSP) directives and
 
 The following sections define which directives are allowed and which values are acceptable under the WebCAT policy model.
 
+A single CSP string MUST NOT contain a comma: a comma encodes multiple policies in one header, and the client rejects any `default_csp`/`extra_csp` value containing one.
+
+Where a directive supports both a plain form (e.g. `script-src`, `style-src`) and its `-elem` variant (`script-src-elem`, `style-src-elem`), the same allowed/disallowed values apply to both. The plain directive, when defined, governs its `-elem` counterpart by inheritance; an explicitly defined `-elem` directive MUST independently satisfy the same constraints.
+
 #### 1.1 `default-src`
 
 Allowed values:
@@ -12,8 +16,12 @@ Allowed values:
 * `'none'`
 * `'self'`
 
+When `default-src 'none'` is used to satisfy the "must be none" condition below, `'none'` MUST be its only value.
+
 If `default-src` is not `'none'`, then the manifest MUST also define:
 
+* `script-src`
+* `style-src`
 * `object-src: 'none'`
 * `worker-src`
 * and either `child-src` or `frame-src`
@@ -25,12 +33,15 @@ Allowed values:
 * `'none'`
 * `'self'`
 * `'wasm-unsafe-eval'`
+* `'sha256-...'` (and `'sha384-...'` / `'sha512-...'`) — the hash of an allowed inline script
 
 Not allowed:
 
-* `sha256-...`, `nonce-...`, or `unsafe-eval`
+* `nonce-...`, `'unsafe-eval'`, `'unsafe-inline'`
 
-> **Note**: The use of hash-based or nonce-based script sources is disallowed due to interference with WebAssembly runtime instrumentation and deterministic script analysis.
+> *Note*: Nonce-based sources and `'unsafe-eval'`/`'unsafe-inline'`/`'strict-dynamic'` remain disallowed: nonces are per-response and cannot be verified statically, and the others defeat deterministic script analysis.
+
+The same allowed and disallowed values apply to `script-src-elem`. A defined `script-src` governs `script-src-elem` by inheritance; if a separate `script-src-elem` is present, it MUST satisfy the same constraints.
 
 #### 1.3 `style-src`
 
@@ -38,9 +49,12 @@ Allowed values:
 
 * `'none'`
 * `'self'`
-* `sha256-...`
+* `sha256-...` (and `sha384-...` / `sha512-...`)
 * `'unsafe-inline'`
 * `'unsafe-hashes'`
+* External URLs only if they point to domains that are also enrolled in WEBCAT
+
+The same values apply to `style-src-elem`.
 
 > **Note**: While `'unsafe-inline'` and `'unsafe-hashes'` are currently permitted due to wide usage, they are discouraged for new applications and may be deprecated in future versions of the specification.
 
