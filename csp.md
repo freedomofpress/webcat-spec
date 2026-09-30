@@ -74,7 +74,7 @@ The client delivers every enrolled document with `Origin-Agent-Cluster: ?1`. Fra
 
 A framed origin that is itself enrolled is verified independently under its own manifest. A framed origin that is not enrolled is not verified at all, and its content is outside WEBCAT's guarantees.
 
-> **Recommendation**: Use iframes to sandbox untrusted or unverifiable content that a verified application still needs: CAPTCHAs, third-party players, payment widgets, rendering of user-supplied HTML, previews, and similar. Always set the `sandbox` attribute on such frames, granting only the flags strictly needed (e.g. `sandbox="allow-scripts"`), and never grant `allow-same-origin` to content you do not control. Data crossing the boundary should go through `postMessage` with an explicit origin check.
+> **Recommendation**: Use iframes to sandbox untrusted or unverifiable content that a verified application still needs: CAPTCHAs, third-party players, payment widgets, rendering of user-supplied HTML, previews, and similar. Always set the `sandbox` attribute on such frames, granting only the flags strictly needed. Never combine `allow-scripts` and `allow-same-origin` on a frame whose content is same-origin with the application, including `srcdoc` frames: such a frame can script the verified document directly. For cross-origin content, `allow-same-origin` only preserves the frame's own origin and is generally required for third-party widgets to function. Data crossing the boundary should go through `postMessage` with an explicit check of `event.origin` and `event.source`.
 
 A server MUST NOT send an `Origin-Agent-Cluster` value other than `?1` for enrolled documents. Such a response is treated as declaring reliance on site-keying and is blocked.
 
