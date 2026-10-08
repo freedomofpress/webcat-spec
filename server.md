@@ -33,7 +33,7 @@ This endpoint MUST return a JSON object with the following structure:
   The enrollment type. For Sigsum enrollments this MUST be set to `"sigsum"`.
 
 - `signers`:
-  An array of Ed25519 public keys, base64-encoded. These keys are authorized to sign WebCAT manifest files for the domain.
+  An array of Ed25519 public keys, base64-encoded. These keys are authorized to sign WEBCAT manifest files for the domain.
 
 - `threshold`:
   An integer ≥ 1 indicating the minimum number of distinct valid signatures required to accept a manifest as valid. The value of `threshold` MUST be less than or equal to the number of entries in `signers`.
