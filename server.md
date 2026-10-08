@@ -1,18 +1,37 @@
 ## Server configuration
 To participate in the WEBCAT integrity verification system, a website MUST advertise a cryptographic enrollment policy at a well-known path. This policy defines the trust material and the constraints used to validate signatures, transparency proofs, and optionally provenance information.
 
-### 1. Well-Known Enrollment Path
+### 1. Well-Known Directory
 
-Websites MUST serve their enrollment policy at:
+A website publishes its current enrollment information, and keeps its history, under `https://<domain>/.well-known/webcat/`. Monitors and auditors use the history to find anything ever signed for the domain by its hash.
 
-```
-https://<domain>/.well-known/webcat/enrollment.json
-```
+| Path | Content |
+|------|---------|
+| `enrollment.json` | The current enrollment information, observed by oracles. |
+| `bundle.json` | The current enrollment information together with the signed manifest, fetched by the browser extension. |
+| `bundle-prev.json` | The previous enrollment information together with a manifest signed under it, served during a policy change. |
+| `enrollment.<hash>.json` | Every enrollment information ever promoted to canonical state on the enrollment chain, including the current one. |
+| `manifest.sigsum.<checksum>.json` | For Sigsum enrollments: the signed manifest whose Sigsum leaf has this checksum. |
+| `manifest.sigstore.<hash>.json` | For Sigstore enrollments: the signed manifest whose Rekor entry has this artifact hash. |
 
-The enrollment policy is discovered asynchronously by clients during the first HTTP request and cached for the duration of the browser session. This approach eliminates the overhead of including policy data in every HTTP response. However, websites have mechanisms to signal that the information MUST be refreshed.
+`<hash>` and `<checksum>` are lowercase hex SHA-256. Files under this directory MUST NOT change or be removed while the domain is enrolled. See [auditing.md](auditing.md).
+
+#### 1.0 Canonical JSON
+
+Every hash in this document is over the [OLPC Canonical JSON](https://web.archive.org/web/20251209150702/http://wiki.laptop.org/go/Canonical_JSON) encoding of the object. Reference implementation: `canonicalize.ts` in the WEBCAT extension.
+
+* `enrollment.<hash>.json`: `<hash>` is the SHA-256 of the canonical enrollment JSON, the same value the chain records.
+* `manifest.sigsum.<checksum>.json`: `<checksum>` is the leaf checksum: SHA-256 of the Sigsum message, which is the SHA-256 of the canonical `manifest` object. All signers of one manifest share it.
+* `manifest.sigstore.<hash>.json`: `<hash>` is the SHA-256 of the canonical `manifest` object, the artifact digest recorded in the Rekor `hashedrekord` entry.
+
+The content is the `manifest` and `signatures` objects of the bundle, as served. It MUST be published no later than the manifest is first served.
+
+#### 1.1 Enrollment discovery
+
+The browser extension learns the canonical enrollment hash of a domain from the preload list (see [enrollment.md](enrollment.md)) and fetches `bundle.json` on the first request to the domain. The enrollment information in the bundle MUST hash to that value. If it does not, the extension fetches `bundle-prev.json` and applies the same check. The bundle is cached for the duration of the browser session.
 
 
-#### 1.1 Field Definitions (Sigsum)
+#### 1.2 Field Definitions (Sigsum)
 This endpoint MUST return a JSON object with the following structure:
 
 ```json
@@ -22,7 +41,6 @@ This endpoint MUST return a JSON object with the following structure:
   "threshold": <integer>,
   "policy": "<base64url-sigsum-policy>",
   "max_age": <integer>,
-  "cas_url": "<url>",
   "logs": {
     "<base64url-log-public-key>": "<url>"
   }
@@ -33,7 +51,7 @@ This endpoint MUST return a JSON object with the following structure:
   The enrollment type. For Sigsum enrollments this MUST be set to `"sigsum"`.
 
 - `signers`:
-  An array of Ed25519 public keys, base64-encoded. These keys are authorized to sign WebCAT manifest files for the domain.
+  An array of Ed25519 public keys, base64-encoded. These keys are authorized to sign WEBCAT manifest files for the domain. A signer key MUST sign WEBCAT manifests only: auditors treat every leaf by an enrolled key as a manifest that must be published.
 
 - `threshold`:
   An integer ≥ 1 indicating the minimum number of distinct valid signatures required to accept a manifest as valid. The value of `threshold` MUST be less than or equal to the number of entries in `signers`.
@@ -44,17 +62,10 @@ This endpoint MUST return a JSON object with the following structure:
 - `max_age`:
   An integer representing the maximum number of seconds a manifest may remain valid after its signing timestamp. Since different signatures might have different inclusion times, `max_age` is always counted from the oldest one. The timestamp is verified against the CometBFT chain's AppHash as described in the enrollment specification.
 
-- `cas_url`:
-  The base URL of the Content Addressable Storage (CAS) which will be used to verify artifact availability.
-  CAS is used by WEBCAT monitors to retrieve:
-    - Sigsum leaves required for manifest verification,
-    - signed manifest objects,
-    - all immutable resources referenced inside the manifest (e.g., WASM binaries, HTML, JS, CSS, auxiliary files).
-
 - `logs`:
   A mapping of Sigsum log public keys (base64url-encoded) to their corresponding log URLs. The enrollment generator includes this mapping, based on the Sigsum trust policy, to help clients locate logs for the purpose of monitoring and auditing.
 
-#### 1.2 Field Definitions (Sigstore)
+#### 1.3 Field Definitions (Sigstore)
 
 Sigstore enrollments use the following structure:
 
@@ -93,57 +104,61 @@ Sigstore enrollments use the following structure:
   For a list of Fulcio OIDs used by GitHub Actions, see:
   [https://github.com/sigstore/fulcio/blob/main/docs/oid-info.md](https://github.com/sigstore/fulcio/blob/main/docs/oid-info.md)
 
+  The claims SHOULD match an identity that signs WEBCAT manifests only, e.g. by pinning the Build Config URI (`1.3.6.1.4.1.57264.1.18`) to a dedicated workflow. Auditors treat every matching log entry as a manifest that must be published.
+
 * `max_age`
   An integer representing the maximum number of seconds a manifest may remain valid after its certificate issuance timestamp.
 
 ### 2. Policy Transition Mechanism
 
-To transition from one enrollment policy to another, servers MUST follow a strict protocol to ensure uninterrupted verification across all clients.
+To transition from one enrollment information to another, servers MUST follow a strict protocol to ensure uninterrupted verification across all browser extensions.
 
 #### 2.1 Transition Requirements
 
 When initiating a policy change:
 
-- The new policy MUST be served persistently at `/.well-known/webcat/enrollment.json`.
-- The previous policy SHOULD be served at `/.well-known/webcat/enrollment-prev.json`.
-- The values of the two files MUST differ.
-
-TODO: describe here or in client validation how to signal a refresh for the client.
+- The new enrollment information MUST be served persistently at `/.well-known/webcat/enrollment.json` and at `/.well-known/webcat/enrollment.<hash>.json`.
+- `/.well-known/webcat/bundle.json` MUST carry the new enrollment information together with a manifest signed under it.
+- `/.well-known/webcat/bundle-prev.json` SHOULD carry the previous enrollment information together with a manifest signed under it.
+- The enrollment information in the two bundles MUST differ.
 
 #### 2.2 Enrollment Observation Period
 
-Once the new policy is published, it enters a transition period during which enrollment systems monitor the well-known path for consistency and stability.
+Once the new enrollment information is published, it enters a transition period during which the enrollment infrastructure monitors the well-known path for consistency and stability.
 
-> ⚠️ **During this period, no clients have switched to the new policy yet.**
+> ⚠️ **During this period, no browser extension has switched to the new enrollment information yet.** Until the enrollment chain promotes the new hash, `bundle-prev.json` is the one that verifies.
 
 To prevent enrollment failure:
 - The contents of `/.well-known/webcat/enrollment.json` MUST remain unchanged throughout this period.
-- Any modification to the enrollment file before the transition completes will invalidate the attempt.
+- Any modification of the enrollment information before the transition completes will invalidate the attempt.
 
 _TODO: since anybody can submit a request for enrollment or de-enrollment, so can do the infra chain itself. This allows for periodic list clenaups not to clog browsers, to remove expired or abandone domains. It can also backfire in some ways though. We should probably always send an alert to the whois email when a change is initiated._
 
 #### 2.3 Post-Transition Compatibility
 
 After the transition is accepted:
-- Some clients will begin enforcing the new policy.
-- Others may still enforce the previous one.
-- Eventually, all clients will converge on the new state.
+- Browser extensions with a fresh preload list verify `bundle.json`.
+- Browser extensions with an older preload list fall back to `bundle-prev.json`.
+- Eventually, all browser extensions converge on the new state.
 
 To ensure full compatibility throughout this staggered rollout:
-- The server SHOULD continue serving `/.well-known/webcat/enrollment-prev.json` until all clients are expected to have adopted the new policy.
-- Once adoption is widespread, `/.well-known/webcat/enrollment-prev.json` SHOULD be removed.
+- The server SHOULD continue serving `/.well-known/webcat/bundle-prev.json` until all preload lists in use are expected to carry the new hash.
+- Once adoption is widespread, `/.well-known/webcat/bundle-prev.json` SHOULD be removed.
+- `/.well-known/webcat/enrollment.<hash>.json` for the previous enrollment information MUST stay, see [auditing.md](auditing.md).
 
 #### 2.4 Example
 
 ```json
-// /.well-known/webcat/enrollment.json
-{ "type": "sigsum", "signers": [...], "threshold": 2, ... }
+// /.well-known/webcat/bundle.json
+{ "enrollment": { "type": "sigsum", "signers": [...], "threshold": 2, ... }, "manifest": { ... }, "signatures": { ... } }
 
-// /.well-known/webcat/enrollment-prev.json
-{ "type": "sigstore", "trusted_root": [...], "issuer": "...", ... }
+// /.well-known/webcat/bundle-prev.json
+{ "enrollment": { "type": "sigstore", "trusted_root": { ... }, "claims": { ... }, ... }, "manifest": { ... }, "signatures": [ ... ] }
 ```
 
-In this example, the server is advertising a new policy requiring 2 signers, while still supporting the older 3-signer policy during the transition window.
+In this example, the server is advertising a new policy requiring 2 Sigsum signers, while still supporting the previous Sigstore policy during the transition window.
+
+To unenroll, the site operator removes `enrollment.json`. Oracles verify that the path returns 404 or 410.
 
 ### 3. Policy Delegation (Optional)
 

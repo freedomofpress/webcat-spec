@@ -57,13 +57,13 @@ Chain parameters (configured in the chain's `OracleConfig`):
 
 The enrollment process consists of:
 
-1. Domain owner publishes the domain's enrollment policy (see `server.md`) at:
+1. The site operator publishes the domain's enrollment information (see `server.md`) at:
 
 ```
 https://<domain>/.well-known/webcat/enrollment.json
 ```
 
-2. Domain owner (or a frontend acting on their behalf) submits an enrollment request off-chain to the oracle set. This request instructs oracles to observe the domain's enrollment file.
+2. The site operator (or a frontend acting on their behalf) submits an enrollment request off-chain to the oracle set. This request instructs oracles to observe the domain's enrollment file.
 
 3. Each oracle independently:
    - Fetches the enrollment file from the domain
@@ -72,7 +72,7 @@ https://<domain>/.well-known/webcat/enrollment.json
 
 4. The chain processes observations through a voting mechanism (see below).
 
-To unenroll, domain owners remove the enrollment JSON file, and oracles verify that the path produces a 404 or 410 status code.
+To unenroll, site operators remove the enrollment JSON file, and oracles verify that the path produces a 404 or 410 status code.
 
 ### Oracle Observation Process
 
@@ -150,6 +150,10 @@ At the end of each block:
 2. For any pending enrollment changes where the delay period has elapsed, we promote them to canonical state by updating the canonical hash for that subdomain.
 
 3. Similarly process any pending configuration changes from admin voting.
+
+## Enrollment history
+
+Canonical state holds only the current hash per domain. The history, every `(domain, hash, block height)` promotion, is obtained by replaying blocks on an observer node. The domain serves each enrollment information at `enrollment.<hash>.json` ([server.md](server.md)).
 
 ## Snapshot
 
