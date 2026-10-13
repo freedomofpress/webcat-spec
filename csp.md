@@ -19,12 +19,14 @@ Allowed values:
 * `'none'`
 * `'self'`
 
-`default-src: 'none'` MUST be the only value if used. If `default-src` is not exactly `'none'` (it is `'self'` or absent), then the manifest MUST also explicitly define:
+If `default-src` is exactly `'none'` (a single value), all other directives are optional. Otherwise (it contains `'self'`, or is absent), the manifest MUST also explicitly define:
 
 * `script-src`
 * `style-src`
-* `object-src: 'none'`
+* `object-src 'none'`
 * `worker-src`
+
+`worker-src` is also required when `child-src` is present, see [2.6](#26-worker-src).
 
 #### 2.2 `script-src` / `script-src-elem`
 
@@ -40,9 +42,11 @@ Not allowed:
 * `'nonce-...'`, `'unsafe-eval'`, `'unsafe-inline'`, `'unsafe-hashes'`, `'strict-dynamic'`
 * Any host source, including enrolled origins
 
-Hash sources allow inline scripts whose content is fixed at signing time and thus verifiable. `script-src-elem` follows the same rules; it is required only if `script-src` is absent and `default-src` is not `'none'`.
+Hash sources allow inline scripts whose content is fixed at signing time and thus verifiable. `script-src-elem` is optional; if present, it follows the same rules.
 
-> **Note**: All scripts must be either served from the enrolled origin (and covered by the manifest) or inlined with a hash. Loading scripts from other origins, even enrolled ones, is not supported.
+`script-src-attr` (inline event handlers and `javascript:` URLs) is optional; if present, it MUST be `'none'`.
+
+> **Note**: All scripts must be either served from the enrolled origin (and covered by the manifest) or inlined with a hash. Loading scripts from other origins, even enrolled ones, is not supported. One exception: per CSP3, a hash source also matches an external `<script src>` whose `integrity` attribute carries the same digest, so such a script may load from another origin. Its content is still pinned by the hash in the signed manifest.
 
 #### 2.3 `style-src` / `style-src-elem`
 
@@ -54,7 +58,7 @@ Allowed values:
 * `'unsafe-inline'`
 * `'unsafe-hashes'`
 
-`style-src-elem` follows the same rules; it is required only if `style-src` is absent and `default-src` is not `'none'`.
+`style-src-elem` and `style-src-attr` are optional; if present, they follow the same rules.
 
 > **Note**: While `'unsafe-inline'` and `'unsafe-hashes'` are currently permitted due to wide usage, they are discouraged for new applications and may be deprecated in future versions of the specification.
 
@@ -85,7 +89,7 @@ Allowed values:
 * `'none'`
 * `'self'`
 
-Must be defined when `default-src` is not `'none'`.
+MUST be defined when `default-src` is not `'none'`, or when `child-src` is present (workers fall back to `child-src`, which is unrestricted).
 
 #### 2.7 Other directives (e.g. `img-src`, `connect-src`, `media-src`, `font-src`)
 
