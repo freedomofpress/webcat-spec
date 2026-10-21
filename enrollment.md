@@ -4,7 +4,7 @@ This document explains how domains enroll into WEBCAT and how validators and ora
 
 The enrollment data are processed and stored in a permissioned CometBFT chain, where the voting network consists of trusted partner orgs (other nonprofits, Tor relay associations, browsers) acting as validators in the CometBFT consensus. Any third party can operate an observer node that allows them to check consistency, behavior, or monitor entries and updates.
 
-TODO: Add description of onion service enrollment, which must be done privately.
+Enrollment of Tor onion services, which must be done without revealing the address to the chain, is specified separately in [Onion](onion.md).
 
 # Background
 
