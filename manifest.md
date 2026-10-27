@@ -107,7 +107,7 @@ A manifest carries one form or the other, never both, matching its enrollment ty
 
 ### Validation rules
 
-* For Sigsum, the manifest must contain at least `threshold` valid signatures and proofs; extra or invalid entries are ignored as long as the threshold of valid ones is met.
+* For Sigsum, the manifest must contain at least `threshold` valid signatures and proofs. Entries for keys outside `signers` are ignored; an invalid proof from an enrolled key fails verification.
 * For Sigstore, the manifest verifies if at least one bundle satisfies the enrollment `claims` and certificate freshness.
 * Signatures are verified over the canonicalized `manifest` object.
 * Each proof must satisfy the enrollment policy.
