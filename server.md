@@ -13,23 +13,41 @@ A website publishes its current enrollment information, and keeps its history, u
 | `enrollment.<hash>.json` | Every enrollment information ever promoted to canonical state on the enrollment chain, including the current one. |
 | `manifest.sigsum.<checksum>.json` | For Sigsum enrollments: the signed manifest whose Sigsum leaf has this checksum. |
 | `manifest.sigstore.<hash>.json` | For Sigstore enrollments: the signed manifest whose Rekor entry has this artifact hash. |
+| `hashes/<hash>` | Each fallback document of the current manifest, under its hash as listed in `fallback_hashes` ([manifest.md](manifest.md)). |
 
-`<hash>` and `<checksum>` are lowercase hex SHA-256. Files under this directory MUST NOT change or be removed while the domain is enrolled. See [auditing.md](auditing.md).
+`<hash>` and `<checksum>` are lowercase hex SHA-256, except under `hashes/`, where `<hash>` is the base64url form used in the manifest. The files named by a hash or checksum MUST NOT change or be removed while the domain is enrolled; the others follow the current state. See [auditing.md](auditing.md).
 
 #### 1.0 Canonical JSON
 
-Every hash in this document is over the [OLPC Canonical JSON](https://web.archive.org/web/20251209150702/http://wiki.laptop.org/go/Canonical_JSON) encoding of the object. Reference implementation: `canonicalize.ts` in the WEBCAT extension.
+Every hash in this document is over the Canonical JSON encoding of the object, as specified for [TUF metadata](https://theupdateframework.github.io/specification/latest/#metaformat) and used by Sigstore: one canonicalization across the enrollment chain, the oracles and the browser extension. Reference implementation: `canonicalize.ts` in the WEBCAT extension.
 
 * `enrollment.<hash>.json`: `<hash>` is the SHA-256 of the canonical enrollment JSON, the same value the chain records.
 * `manifest.sigsum.<checksum>.json`: `<checksum>` is the leaf checksum: SHA-256 of the Sigsum message, which is the SHA-256 of the canonical `manifest` object. All signers of one manifest share it.
 * `manifest.sigstore.<hash>.json`: `<hash>` is the SHA-256 of the canonical `manifest` object, the artifact digest recorded in the Rekor `hashedrekord` entry.
 
-The content is the `manifest` and `signatures` objects of the bundle, as served. It MUST be published no later than the manifest is first served.
+A `manifest.*.json` file holds the `manifest` and `signatures` objects of the bundle, as served. It MUST be published no later than the manifest is first served.
 
 #### 1.1 Enrollment discovery
 
 The browser extension learns the canonical enrollment hash of a domain from the preload list (see [enrollment.md](enrollment.md)) and fetches `bundle.json` on the first request to the domain. The enrollment information in the bundle MUST hash to that value. If it does not, the extension fetches `bundle-prev.json` and applies the same check. The bundle is cached for the duration of the browser session.
 
+The bundle is a JSON object:
+
+```json
+{
+  "enrollment": { ... },   // identical to the enrolled enrollment.json
+  "manifest":   { ... },   // the `manifest` object (see manifest.md)
+  "signatures": ...         // the `signatures` value (see manifest.md)
+}
+```
+
+As an optimization, a server MAY instead deliver the enrollment inline on the main document response via the header:
+
+```
+x-webcat-enrollment: <base64url-encoded enrollment JSON>
+```
+
+When present, the client verifies this enrollment without waiting for the bundle fetch, which still runs for the manifest; enrollment verification stops blocking the first response. The supplied enrollment is subject to the same canonical-hash check against the committed state.
 
 #### 1.2 Field Definitions (Sigsum)
 This endpoint MUST return a JSON object with the following structure:
@@ -37,6 +55,7 @@ This endpoint MUST return a JSON object with the following structure:
 ```json
 {
   "type": "sigsum",
+  "enrollment_schema": 1,
   "signers": ["<base64url-ed25519-public-key>", "..."],
   "threshold": <integer>,
   "policy": "<base64url-sigsum-policy>",
@@ -49,6 +68,9 @@ This endpoint MUST return a JSON object with the following structure:
 
 - `type`:
   The enrollment type. For Sigsum enrollments this MUST be set to `"sigsum"`.
+
+- `enrollment_schema`:
+  The version of this enrollment format, an integer. The current version is `1`. Enrollments without the field predate versioning and carry `cas_url`; everything else in them is as in version 1. The field is part of the hashed content.
 
 - `signers`:
   An array of Ed25519 public keys, base64-encoded. These keys are authorized to sign WEBCAT manifest files for the domain. A signer key MUST sign WEBCAT manifests only: auditors treat every leaf by an enrolled key as a manifest that must be published.
@@ -65,6 +87,9 @@ This endpoint MUST return a JSON object with the following structure:
 - `logs`:
   A mapping of Sigsum log public keys (base64url-encoded) to their corresponding log URLs. The enrollment generator includes this mapping, based on the Sigsum trust policy, to help clients locate logs for the purpose of monitoring and auditing. This field is REQUIRED and MUST contain at least one entry; clients reject a Sigsum enrollment whose `logs` map is missing or empty.
 
+- `cas_url` (deprecated):
+  The base URL of a content-addressable store, replaced by the well-known directory. Enrollments published before `enrollment_schema` carry it; the field is part of the hashed content, so such an enrollment MUST keep it unchanged while in use. New enrollments MUST NOT include it.
+
 #### 1.3 Field Definitions (Sigstore)
 
 Sigstore enrollments use the following structure:
@@ -72,6 +97,7 @@ Sigstore enrollments use the following structure:
 ```json
 {
   "type": "sigstore",
+  "enrollment_schema": 1,
   "trusted_root": { "...": "..." },
   "claims": {
     "2.5.29.17": "alice@example.com",
@@ -83,6 +109,9 @@ Sigstore enrollments use the following structure:
 
 * `type`:
   The enrollment type. For Sigstore enrollments this MUST be set to `"sigstore"`.
+
+* `enrollment_schema`:
+  As for Sigsum enrollments: `1`.
 
 * `trusted_root`:
   A Sigstore trusted root JSON document.
@@ -115,34 +144,6 @@ Sigstore enrollments use the following structure:
   An integer representing the maximum number of seconds a manifest may remain valid after its certificate issuance timestamp.
 
 The `type` field is REQUIRED on every enrollment object; clients reject an enrollment that omits it or carries an unrecognized value.
-
-#### 1.3 Browser-facing bundle
-
-While `enrollment.json` is the artifact observed by oracles and committed to the enrollment chain, browsers fetch a bundle that packages the enrollment together with the signed manifest, served at:
-
-```
-https://<domain>/.well-known/webcat/bundle.json
-```
-
-The bundle is a JSON object:
-
-```json
-{
-  "enrollment": { ... },   // identical to the enrolled enrollment.json
-  "manifest":   { ... },   // the `manifest` object (see manifest.md)
-  "signatures": ...         // the `signatures` value (see manifest.md)
-}
-```
-
-The `enrollment` member MUST canonicalize to exactly the bytes that were enrolled, so that its hash matches the canonical hash committed on-chain; otherwise the client rejects the origin. During a policy transition the previous bundle SHOULD additionally be served at `/.well-known/webcat/bundle-prev.json` (see §2), and clients fall back to it when the current bundle's enrollment does not match the committed hash.
-
-As an optimization, a server MAY instead deliver the enrollment inline on the main document response via the header:
-
-```
-x-webcat-enrollment: <base64url-encoded enrollment JSON>
-```
-
-When present, the client verifies this enrollment without waiting for the bundle fetch, which still runs for the manifest; enrollment verification stops blocking the first response. The supplied enrollment is subject to the same canonical-hash check against the committed state.
 
 #### 1.4 Response Header Constraints
 
