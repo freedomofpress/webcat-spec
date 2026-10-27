@@ -15,35 +15,26 @@ Each enrolled web application must serve a JSON manifest with the following top-
 
 ## 1.1 `manifest` object
 
-This object describes the application metadata, CSP rules, required file hashes, index/fallback mapping, and Sigsum timestamp.
+This object describes the application metadata, CSP rules, required file hashes, fallbacks, and Sigsum timestamp.
 
 ### Required fields
 
+* `manifest_schema` (integer)
+  The version of this manifest format. The current version is `1`: directory entries in `files`, `fallback_hashes`, `source` and `artifact`. Manifests without the field predate versioning: they carry `default_index`, `default_fallback` and `app`, and MAY also carry the version 1 fields next to them. The field is part of the signed content.
+
 * `version` (string)
-  Application version identifier. When `source` is set, this MUST be the name of a git tag in `source`.
+  Application version identifier, a [semantic version](https://semver.org/spec/v2.0.0.html) such as `1.4.0`. When `source` is set, this MUST be the name of a git tag in `source`. A leading `v`, as in existing git tags, is accepted but advised against.
 
 * `default_csp` (string)
   The global Content-Security-Policy to enforce for all paths not covered by `extra_csp`.
 
 * `files` (object)
-  Map of absolute paths to SHA-256 hashes (base64url). Every key begins with `/` (e.g. `"/index.html"`, `"/js/app.js"`).
-
-* `default_index` (string)
-  Relative filename appended to a directory request path to resolve it. A request for `/` resolves to `files["/" + default_index]`, and a request for `/dir/` resolves to `files["/dir/" + default_index]`.
+  Map of absolute paths to SHA-256 hashes (base64url). A directory path, ending in `/`, is listed like any other path, with the hash of the document the server serves for it; `/` itself is such a path.
 
   Example:
 
   ```json
-  "default_index": "index.html"
-  ```
-
-* `default_fallback` (string)
-  Absolute path (WITH leading slash) within `files`, served for non-existent `main_frame` paths. Can be used for SPA catch-alls, rewrites, custom error pages. Note the asymmetry with `default_index`: `default_fallback` is a full `files` key, while `default_index` is a bare filename.
-
-  Example:
-
-  ```json
-  "default_fallback": "/404.html"
+  "files": { "/": "<hash of index.html>", "/index.html": "<hash of index.html>", "/docs/": "<hash of docs/index.html>", "/docs/index.html": "<hash of docs/index.html>" }
   ```
 
 * `wasm` (array of strings)
@@ -62,6 +53,18 @@ This object describes the application metadata, CSP rules, required file hashes,
 
 ### Optional fields
 
+* `fallback_hashes` (array of strings)
+  SHA-256 hashes (base64url) of documents accepted at any path on a `main_frame` navigation, checked before the path's own entry: the catch-all page of a single-page application, a custom error page. Subresources never fall back. Each fallback MUST be served at `/.well-known/webcat/hashes/<hash>` ([server.md](server.md)), so that what the manifest accepts can be found by its hash.
+
+  Example:
+
+  ```json
+  "fallback_hashes": ["<hash of 404.html>"]
+  ```
+
+* `default_index` (string, deprecated) and `default_fallback` (string, deprecated)
+  Replaced by directory entries in `files` and by `fallback_hashes`. `default_index` is a bare filename appended to a directory path, `default_fallback` an absolute `files` key served for `main_frame` paths not in `files`. Only manifests without `manifest_schema` carry them; browser extensions from 3.2.0 derive the replacements from them when `fallback_hashes` is absent, and earlier ones require them. A manifest with `manifest_schema` MUST NOT include them.
+
 * `source` (string)
   URL of the git repository the application is built from, including the protocol (`https://` or `ssh://`). Omitted for closed-source applications. The tag `version` MUST exist in this repository and MUST contain the build recipe described in section 2.
 
@@ -75,7 +78,7 @@ This object describes the application metadata, CSP rules, required file hashes,
   See section 3 for the archive format. Manifests sharing a `version` MUST list identical `files`.
 
 * `app` (string, deprecated)
-  Replaced by `source`. The browser extension ignores it.
+  Replaced by `source`. Only manifests without `manifest_schema` carry it; it MUST be ignored. A manifest with `manifest_schema` MUST NOT include it.
 
 * `extra_csp` (object)
   Map of path prefixes to CSP strings. Longest‐prefix matching applies.
