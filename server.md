@@ -18,7 +18,7 @@ Every hash in this document is over the [OLPC Canonical JSON](https://web.archiv
 
 * No whitespaces. Object keys sorted by their UTF-8 bytes.
 * Strings are UTF-8; only `"` and `\` are escaped, as `\"` and `\\`. Control characters and non-ASCII are emitted raw, so the output is not always valid JSON.
-* Numbers are integers in `[-2^63, 2^64)`, written in decimal with no leading zeros, exponent or `-0`. Anything else, including an integral float such as `1.0`, is an error: an encoder MUST fail.
+* Numbers are integers with `|n| <= 2^53 - 1`, the range every JSON parser represents exactly, written in decimal with no leading zeros, exponent or `-0`. Anything else is an error: an encoder MUST fail rather than round or coerce. A parser that maps `1.0` to `1` before encoding cannot detect it; that is acceptable, since both encode to the same bytes.
 * `true`, `false` and `null` as in JSON.
 
 Hashes are SHA-256 over those bytes. [vectors/canonical-json.json](vectors/canonical-json.json) holds test vectors, generated with the `olpc-cjson` crate the chain uses; every implementation MUST reproduce `canonical_hex` and `sha256` for each vector and reject every vector marked `error`.
