@@ -12,6 +12,17 @@ https://<domain>/.well-known/webcat/enrollment.json
 The enrollment policy is discovered asynchronously by clients during the first HTTP request and cached for the duration of the browser session. This approach eliminates the overhead of including policy data in every HTTP response. However, websites have mechanisms to signal that the information MUST be refreshed.
 
 
+#### 1.0 Canonical JSON
+
+Every hash in this document is over the [OLPC Canonical JSON](https://web.archive.org/web/20251209150702/http://wiki.laptop.org/go/Canonical_JSON) encoding of the object, the format of TUF metadata: one canonicalization across the enrollment chain, the oracles and the browser extension. The rules are:
+
+* No whitespaces. Object keys sorted by their UTF-8 bytes.
+* Strings are UTF-8; only `"` and `\` are escaped, as `\"` and `\\`. Control characters and non-ASCII are emitted raw, so the output is not always valid JSON.
+* Numbers are integers in `[-2^63, 2^64)`, written in decimal with no leading zeros, exponent or `-0`. Anything else, including an integral float such as `1.0`, is an error: an encoder MUST fail.
+* `true`, `false` and `null` as in JSON.
+
+Hashes are SHA-256 over those bytes. [vectors/canonical-json.json](vectors/canonical-json.json) holds test vectors, generated with the `olpc-cjson` crate the chain uses; every implementation MUST reproduce `canonical_hex` and `sha256` for each vector and reject every vector marked `error`.
+
 #### 1.1 Field Definitions (Sigsum)
 This endpoint MUST return a JSON object with the following structure:
 
