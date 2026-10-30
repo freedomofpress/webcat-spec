@@ -19,7 +19,9 @@ A website publishes its current enrollment information, and keeps its history, u
 
 #### 1.0 Canonical JSON
 
-Every hash in this document is over the Canonical JSON encoding of the object, as specified for [TUF metadata](https://theupdateframework.github.io/specification/latest/#metaformat) and used by Sigstore: one canonicalization across the enrollment chain, the oracles and the browser extension. Reference implementation: `canonicalize.ts` in the WEBCAT extension.
+Every hash in this document is over the [JSON Canonicalization Scheme (RFC 8785)](https://www.rfc-editor.org/rfc/rfc8785) encoding of the object.
+
+Enrollments and manifests without `enrollment_schema` or `manifest_schema` predate this and were hashed over [OLPC Canonical JSON](https://theupdateframework.github.io/specification/latest/#metaformat), which differs from RFC 8785 only in the escaping of control characters, in the order of keys with characters outside the BMP, and in number formatting. A verifier MUST accept such a file if its hash matches under either encoding. Files with a schema field MUST match under RFC 8785 only.
 
 * `enrollment.<hash>.json`: `<hash>` is the SHA-256 of the canonical enrollment JSON, the same value the chain records.
 * `manifest.sigsum.<checksum>.json`: `<checksum>` is the leaf checksum: SHA-256 of the Sigsum message, which is the SHA-256 of the canonical `manifest` object. All signers of one manifest share it.
@@ -70,7 +72,7 @@ This endpoint MUST return a JSON object with the following structure:
   The enrollment type. For Sigsum enrollments this MUST be set to `"sigsum"`.
 
 - `enrollment_schema`:
-  The version of this enrollment format, an integer. The current version is `1`. Enrollments without the field predate versioning and carry `cas_url`; everything else in them is as in version 1. The field is part of the hashed content.
+  The version of this enrollment format, an integer. The current version is `1`. Enrollments without the field predate versioning and carry `cas_url`; everything else in them is as in version 1. The field is part of the hashed content and selects the canonicalization (§1.0).
 
 - `signers`:
   An array of Ed25519 public keys, base64-encoded. These keys are authorized to sign WEBCAT manifest files for the domain. A signer key MUST sign WEBCAT manifests only: auditors treat every leaf by an enrolled key as a manifest that must be published.

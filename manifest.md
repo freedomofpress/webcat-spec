@@ -20,7 +20,7 @@ This object describes the application metadata, CSP rules, required file hashes,
 ### Required fields
 
 * `manifest_schema` (integer)
-  The version of this manifest format. The current version is `1`: directory entries in `files`, `fallback_hashes`, `source` and `artifact`. Manifests without the field predate versioning: they carry `default_index`, `default_fallback` and `app`, and MAY also carry the version 1 fields next to them. The field is part of the signed content.
+  The version of this manifest format. The current version is `1`: directory entries in `files`, `fallback_hashes`, `source` and `artifact`. Manifests without the field predate versioning: they carry `default_index`, `default_fallback` and `app`, and MAY also carry the version 1 fields next to them. The field is part of the signed content and selects the canonicalization ([Server](server.md) §1.0).
 
 * `version` (string)
   Application version identifier, a [semantic version](https://semver.org/spec/v2.0.0.html) such as `1.4.0`. When `source` is set, this MUST be the name of a git tag in `source`. A leading `v`, as in existing git tags, is accepted but advised against.
@@ -124,7 +124,7 @@ A manifest carries one form or the other, never both, matching its enrollment ty
 
 * For Sigsum, the manifest must contain at least `threshold` valid signatures and proofs. Entries for keys outside `signers` are ignored; an invalid proof from an enrolled key fails verification.
 * For Sigstore, the manifest verifies if at least one bundle satisfies the enrollment `claims` and certificate freshness.
-* Signatures are verified over the canonicalized `manifest` object.
+* Signatures are verified over the canonicalized `manifest` object ([Server](server.md) §1.0).
 * Each proof must satisfy the enrollment policy.
 
 ## 2. Reproducible builds
