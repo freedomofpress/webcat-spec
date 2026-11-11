@@ -78,7 +78,7 @@ The client delivers every enrolled document with `Origin-Agent-Cluster: ?1`. Fra
 
 A framed origin that is itself enrolled is verified independently under its own manifest. A framed origin that is not enrolled is not verified at all, and its content is outside WEBCAT's guarantees.
 
-> **Recommendation**: Use iframes to sandbox untrusted or unverifiable content that a verified application still needs: CAPTCHAs, third-party players, payment widgets, rendering of user-supplied HTML, previews, and similar. Always set the `sandbox` attribute on such frames, granting only the flags strictly needed. Never combine `allow-scripts` and `allow-same-origin` on a frame whose content is same-origin with the application, including `srcdoc` frames: such a frame can script the verified document directly. For cross-origin content, `allow-same-origin` only preserves the frame's own origin and is generally required for third-party widgets to function. Data crossing the boundary should go through `postMessage` with an explicit check of `event.origin` and `event.source`.
+A policy that lets a document frame another origin MUST carry a `sandbox` directive, see [2.7](#27-sandbox). The effective frame source list is `frame-src`, falling back to `child-src`, then `default-src`; absent all three, frames are unrestricted. The directive is not required when every source in that list is `'none'` or `'self'`: same-origin frames are covered by this manifest.
 
 A server MUST NOT send an `Origin-Agent-Cluster` value other than `?1` for enrolled documents. Such a response is treated as declaring reliance on site-keying and is blocked.
 
@@ -91,7 +91,33 @@ Allowed values:
 
 MUST be defined when `default-src` is not `'none'`, or when `child-src` is present (workers fall back to `child-src`, which is unrestricted).
 
-#### 2.7 Other directives (e.g. `img-src`, `connect-src`, `media-src`, `font-src`)
+#### 2.7 `sandbox`
+
+Allowed values:
+
+* `allow-scripts`
+* `allow-same-origin`
+* `allow-forms`
+* `allow-popups`
+* `allow-modals`
+* `allow-downloads`
+* `allow-pointer-lock`
+* `allow-orientation-lock`
+* `allow-presentation`
+* `allow-storage-access-by-user-activation`
+
+Not allowed:
+
+* `allow-top-navigation`, `allow-top-navigation-by-user-activation`, `allow-top-navigation-to-custom-protocols`
+* `allow-popups-to-escape-sandbox`
+
+MUST be present when the policy lets the document frame another origin, see [2.5](#25-frame-src--child-src). A bare `sandbox` is accepted.
+
+The sandboxing flags of a document are inherited by every frame and popup it creates, and a frame can only add restrictions. The directive therefore sets a floor for the whole subtree: no frame, enrolled or not, and no window opened from a frame can navigate the verified top-level document or escape into an unsandboxed window. Note that the document itself is sandboxed too: windows it opens inherit the flags, and a popup cannot escape them.
+
+> **Recommendation**: Still set the `sandbox` attribute on each frame that holds untrusted or unverifiable content (CAPTCHAs, third-party players, payment widgets, user-supplied HTML, previews), granting only the flags that frame needs. Never combine `allow-scripts` and `allow-same-origin` on a frame whose content is same-origin with the application, including `srcdoc` frames: such a frame can script the verified document directly. For cross-origin content, `allow-same-origin` only preserves the frame's own origin and is generally required for third-party widgets to function. `data:` frames load without a network request and are covered only by this attribute. Data crossing the boundary should go through `postMessage` with an explicit check of `event.origin` and `event.source`.
+
+#### 2.8 Other directives (e.g. `img-src`, `connect-src`, `media-src`, `font-src`)
 
 There are currently no restrictions on the values used for the following directives:
 
@@ -110,5 +136,6 @@ script-src 'self' 'wasm-unsafe-eval' 'sha256-oiHtO61BAW24D+FpLSqz2Jnv6Wv67XDn90H
 style-src 'self' 'unsafe-inline';
 object-src 'none';
 worker-src 'self';
-frame-src https://captcha.example
+frame-src https://captcha.example;
+sandbox allow-scripts allow-same-origin allow-forms allow-popups
 ```
